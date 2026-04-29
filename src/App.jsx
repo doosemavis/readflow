@@ -1,0 +1,338 @@
+import { useState, useRef, useCallback, useDeferredValue, useEffect } from "react";
+import {
+  Upload, FileText, Type, Palette, Eye, Sun, Moon, SunMedium, BookOpen,
+  ChevronDown, X, Sparkles, Baseline, Coffee, Waves, TreePine,
+  Flame, CloudMoon, CircleDot, Highlighter, Underline as UnderlineIcon,
+  EyeOff, MousePointer2, Focus, PanelLeftClose, PanelLeft, Loader2,
+  Crown, Clock, Check, List, Hash,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify
+} from "lucide-react";
+
+import { THEMES, PALETTES, GUIDE_COLORS, FONTS, DEMO_TEXT } from "./config/constants";
+import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure } from "./utils";
+import { useSubscription } from "./hooks/useSubscription";
+import { useRecentDocs } from "./hooks/useRecentDocs";
+import {
+  Toggle, Slider, Segment, Section, FontPicker,
+  UploadBadge, SidebarRecentDocs, LandingRecentDocs,
+  DocumentBody, useReadingGuide,
+  PricingModal, PaywallModal, CheckoutModal,
+} from "./components";
+
+export default function App() {
+  // ── Document state ──
+  const [text, setText] = useState("");
+  const [docSections, setDocSections] = useState(null);
+  const [fileName, setFileName] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [hoverUpload, setHoverUpload] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadMsg, setLoadMsg] = useState("");
+  const [panelOpen, setPanelOpen] = useState(true);
+
+  // ── Enhancement state ──
+  const [neuroDiv, setNeuroDiv] = useState(false);
+  const [neuroDivIntensity, setNeuroDivIntensity] = useState(0.42);
+  const [hueGuide, setHueGuide] = useState(false);
+  const [huePalette, setHuePalette] = useState("ocean");
+  const [focusMode, setFocusMode] = useState(false);
+  const [focusPara, setFocusPara] = useState(-1);
+  const [guideMode, setGuideMode] = useState("none");
+  const [guideColor, setGuideColor] = useState("yellow");
+
+  // ── Typography state ──
+  const [fontFamily, setFontFamily] = useState("Literata");
+  const [fontSize, setFontSize] = useState(18);
+  const [lineHeight, setLineHeight] = useState(1.8);
+  const [letterSpacing, setLetterSpacing] = useState(0);
+  const [wordSpacing, setWordSpacing] = useState(0);
+  const [columnWidth, setColumnWidth] = useState(95);
+  const [textAlign, setTextAlign] = useState("left");
+  const [theme, setTheme] = useState("warm");
+
+  // ── Subscription & modals ──
+  const sub = useSubscription();
+  const recentDocs = useRecentDocs();
+  const [showPricing, setShowPricing] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutBilling, setCheckoutBilling] = useState("monthly");
+  const [showChapterNav, setShowChapterNav] = useState(false);
+  const [devBypass, setDevBypass] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+
+  // ── Refs ──
+  const fileRef = useRef();
+  const readerRef = useRef();
+  const sectionRefs = useRef({});
+
+  // ── Derived ──
+  const t = THEMES[theme];
+  const currentFont = FONTS.find(f => f.name === fontFamily);
+  const hasSections = docSections && docSections.length > 0 && (docSections.length > 1 || docSections[0]?.title);
+
+  // ── Deferred enhancement values ──
+  // React commits the urgent render (toggle visual) first, then updates DocumentBody
+  // concurrently in the background — toggle is instantaneous from the user's perspective.
+  const deferredNeuroDiv = useDeferredValue(neuroDiv);
+  const deferredHueGuide = useDeferredValue(hueGuide);
+  const deferredFocusMode = useDeferredValue(focusMode);
+
+  // ── Focus style management (kept here so DocumentBody never re-renders for focusPara changes) ──
+  const focusStyleRef = useRef(null);
+  useEffect(() => {
+    if (!focusStyleRef.current) { focusStyleRef.current = document.createElement("style"); document.head.appendChild(focusStyleRef.current); }
+    if (focusMode && focusPara >= 0) focusStyleRef.current.textContent = `.rf-para{opacity:0.1;transition:opacity 0.35s ease}.rf-para[data-idx="${focusPara}"]{opacity:1}`;
+    else if (focusMode) focusStyleRef.current.textContent = `.rf-para{opacity:0.1;transition:opacity 0.35s ease}`;
+    else focusStyleRef.current.textContent = `.rf-para{opacity:1;transition:opacity 0.35s ease}`;
+  }, [focusMode, focusPara]);
+
+  // ── Reading guide hook ──
+  const guide = useReadingGuide({ guideMode, guideColor, fontSize, lineHeight, t });
+
+  // ── Handlers ──
+  const scrollToSection = useCallback((idx) => {
+    sectionRefs.current[idx]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const attemptUpload = useCallback((file) => {
+    if (!file) return;
+    if (!sub.canUpload && !devBypass) { setShowPaywall(true); return; }
+    doUpload(file);
+  }, [sub.canUpload, devBypass]);
+
+  const doUpload = useCallback(async (file) => {
+    setLoading(true); setLoadMsg("Reading file…");
+    try {
+      const ext = file.name.split(".").pop().toLowerCase();
+      let sections;
+      if (ext === "pdf") { setLoadMsg("Loading PDF engine…"); sections = await parsePDF(file); }
+      else if (ext === "epub") { setLoadMsg("Unpacking EPUB…"); sections = await parseEPUB(file); }
+      else if (ext === "docx") { setLoadMsg("Extracting DOCX…"); sections = await parseDOCX(file); }
+      else if (ext === "html" || ext === "htm") { setLoadMsg("Parsing HTML…"); sections = parseHTMLStructured(await file.text()); }
+      else { sections = detectTextStructure(await file.text()); }
+      sub.recordUpload();
+      const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
+      setText(fullText); setDocSections(sections); setFileName(file.name);
+      await recentDocs.saveDoc(file.name, sections, fullText);
+    } catch (e) { setText("Error reading file: " + e.message); setDocSections(null); setFileName(file.name); }
+    finally { setLoading(false); setLoadMsg(""); }
+  }, [sub, recentDocs]);
+
+  const loadRecentDoc = useCallback(async (entry) => {
+    setLoading(true); setLoadMsg("Loading saved document…");
+    try {
+      const data = await recentDocs.loadDoc(entry);
+      if (data) { setText(data.text); setDocSections(data.sections); setFileName(data.name); }
+      else { setText("Document no longer available. Try uploading it again."); setDocSections(null); setFileName(entry.name); }
+    } catch { setText("Error loading saved document."); setDocSections(null); }
+    finally { setLoading(false); setLoadMsg(""); }
+  }, [recentDocs]);
+
+  const onDrop = useCallback((e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer?.files?.[0]) attemptUpload(e.dataTransfer.files[0]); }, [attemptUpload]);
+  const handleSelectPlan = useCallback((billing) => { setShowPricing(false); setCheckoutBilling(billing); setShowCheckout(true); }, []);
+  const handleCheckoutSuccess = useCallback((billing) => { setShowCheckout(false); if (!sub.isTrial && sub.plan === "free") sub.startTrial(billing); else sub.activatePro(billing); }, [sub]);
+
+  const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.html,.htm,.csv,.json,.log,.rtf";
+  const themeIcons = { warm: Coffee, cool: Waves, dark: Moon, sepia: SunMedium, midnight: CloudMoon };
+
+  // ── Modals ──
+  const modals = (<>
+    {showPricing && <PricingModal onClose={() => setShowPricing(false)} onSelectPlan={handleSelectPlan} hasUsedTrial={sub.isTrial || sub.plan === "pro"} t={t} />}
+    {showCheckout && <CheckoutModal billing={checkoutBilling} hasUsedTrial={sub.isTrial || sub.plan === "pro"} onSuccess={handleCheckoutSuccess} onClose={() => setShowCheckout(false)} t={t} />}
+    {showPaywall && <PaywallModal uploadsUsed={sub.uploadsUsed} onUpgrade={() => { setShowPaywall(false); setShowPricing(true); }} onClose={() => setShowPaywall(false)} t={t} />}
+  </>);
+
+  // ═══════════════════════════════════════════
+  // LOADING STATE
+  // ═══════════════════════════════════════════
+  if (!sub.loaded) return (
+    <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
+      <div style={{ textAlign: "center" }}><BookOpen size={28} style={{ color: t.accent, marginBottom: 10 }} /><p style={{ fontSize: 14, color: t.fgSoft }}>Loading ReadFlow…</p></div>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════
+  // LANDING PAGE
+  // ═══════════════════════════════════════════
+  if (!text && !loading) return (
+    <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif", padding: 24 }}>
+      {modals}
+      <div style={{ textAlign: "center", maxWidth: 520 }}>
+        <div style={{ width: 68, height: 68, borderRadius: 20, background: t.accentSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><BookOpen size={32} style={{ color: t.accent }} /></div>
+        <h1 style={{ fontSize: 36, fontWeight: 740, marginBottom: 6, letterSpacing: "-0.025em" }}>ReadFlow</h1>
+        <p style={{ fontSize: 15, color: t.fgSoft, marginBottom: 12, lineHeight: 1.6, maxWidth: 400, margin: "0 auto 12px" }}>Adaptive reading enhancement with word anchoring, color-gradient tracking, focus mode, and full typography control.</p>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 32, fontSize: 12, fontWeight: 600, color: t.fgSoft }}>
+          {sub.isPro ? <><Crown size={12} style={{ color: t.accent }} /><span style={{ color: t.accent }}>{sub.isTrial ? `Pro Trial — ${sub.trialDaysLeft} days left` : "Pro Plan"}</span></> : <><FileText size={12} /> {sub.uploadsUsed}/3 free docs used</>}
+          {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ background: t.accentSoft, border: "none", cursor: "pointer", color: t.accent, fontSize: 11, fontWeight: 650, padding: "2px 8px", borderRadius: 6, marginLeft: 4 }}>Upgrade</button>}
+        </div>
+        <div onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => !loading && fileRef.current?.click()} onMouseEnter={() => setHoverUpload(true)} onMouseLeave={() => setHoverUpload(false)} style={{ border: `2px dashed ${dragging || hoverUpload ? t.accent : t.border}`, borderRadius: 18, padding: "52px 32px", cursor: "pointer", background: dragging ? t.accentSoft : hoverUpload ? t.surfaceHover : t.surface, transition: "all 0.25s ease", marginBottom: 24, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", transform: hoverUpload ? "translateY(-2px)" : "translateY(0)", boxShadow: hoverUpload ? `0 8px 24px ${t.accent}15` : "none" }}>
+          <Upload size={30} style={{ color: hoverUpload ? t.accent : t.icon, marginBottom: 14, transition: "color 0.2s ease" }} />
+          <p style={{ fontSize: 15, fontWeight: 620, color: t.fg, marginBottom: 6 }}>Drop a file here or click to browse</p>
+          <p style={{ fontSize: 12, color: hoverUpload ? t.accent : t.fgSoft, letterSpacing: "0.04em", transition: "color 0.2s ease" }}>PDF · EPUB · DOCX · TXT · MD · HTML</p>
+          <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => e.target.files?.[0] && attemptUpload(e.target.files[0])} />
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <button onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); }} style={{ padding: "10px 28px", borderRadius: 10, border: `1px solid ${t.border}`, background: "transparent", color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 560, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><FileText size={14} /> Try demo article</button>
+          {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: t.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><Crown size={14} /> See Pro plans</button>}
+        </div>
+        <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} t={t} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 40 }}>
+          {Object.entries(THEMES).map(([key, th]) => <button key={key} onClick={() => setTheme(key)} title={key} style={{ width: 26, height: 26, borderRadius: 13, background: th.accent, cursor: "pointer", border: theme === key ? `2.5px solid ${t.fg}` : "2.5px solid transparent", boxShadow: theme === key ? `0 0 0 2.5px ${t.bg}` : "none", transition: "all 0.15s" }} />)}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════
+  // FULL-SCREEN LOADING
+  // ═══════════════════════════════════════════
+  if (loading && !text) return (
+    <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
+      <Loader2 size={36} style={{ color: t.accent, marginBottom: 16, animation: "spin 1s linear infinite" }} />
+      <p style={{ fontSize: 16, fontWeight: 620, color: t.fg, marginBottom: 4 }}>{loadMsg}</p>
+      <p style={{ fontSize: 13, color: t.fgSoft }}>This may take a moment for large files</p>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════
+  // READER VIEW
+  // ═══════════════════════════════════════════
+  return (
+    <div style={{ height: "100vh", overflow: "hidden", background: t.bg, color: t.fg, fontFamily: "'DM Sans', sans-serif", display: "flex" }}>
+      {modals}
+
+      {/* ── SIDEBAR ── */}
+      <div className="rf-no-select" style={{ width: panelOpen ? 296 : 0, minWidth: panelOpen ? 296 : 0, height: "100%", overflowY: "auto", overflowX: "hidden", borderRight: panelOpen ? `1px solid ${t.border}` : "none", background: t.bg, transition: "width 0.3s ease, min-width 0.3s ease" }}>
+        {panelOpen && (
+          <div style={{ width: 296 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "12px 12px 0px" }}>
+              <button onClick={() => setPanelOpen(false)} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 4, borderRadius: 6 }}><PanelLeftClose size={16} /></button>
+            </div>
+
+            <div style={{ padding: "10px 0 2px" }}>
+              <UploadBadge sub={sub} onUpgrade={() => setShowPricing(true)} onCancel={() => sub.cancelTrial()} t={t} />
+              {/* DEV ONLY */}
+              <div style={{ padding: "0 14px 4px" }}><button onClick={() => setDevBypass(!devBypass)} style={{ width: "100%", padding: "5px 10px", borderRadius: 7, border: `1px dashed ${devBypass ? "#22C55E" : "#E25C5C"}`, background: devBypass ? "#22C55E12" : "transparent", color: devBypass ? "#22C55E" : "#E25C5C", cursor: "pointer", fontSize: 10, fontWeight: 650, fontFamily: "monospace", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, boxSizing: "border-box" }}>{devBypass ? "✓ DEV: Uploads unlimited" : "⚙ DEV: Disable upload limit"}</button></div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${t.borderSoft}`, fontSize: 12, color: t.fgSoft }}>
+              <FileText size={13} /><span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileName}</span>
+              <button onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 2 }}><X size={14} /></button>
+            </div>
+
+            <Section title="Enhancements" icon={Sparkles} t={t} open={false}>
+              <Toggle on={neuroDiv} onChange={setNeuroDiv} label="NeuroDiv Anchoring" icon={Baseline} t={t} />
+              {neuroDiv && <Slider value={neuroDivIntensity} min={0.2} max={0.7} step={0.01} onChange={setNeuroDivIntensity} label="Bold intensity" display={Math.round(neuroDivIntensity * 100) + "%"} t={t} />}
+              <Toggle on={hueGuide} onChange={setHueGuide} label="HueGuide Tracking" icon={Palette} t={t} />
+              {hueGuide && <div style={{ padding: "6px 12px", display: "flex", flexWrap: "wrap", gap: 6 }}>{Object.entries(PALETTES).map(([k, pal]) => <button key={k} onClick={() => setHuePalette(k)} title={pal.label} style={{ width: 42, height: 26, borderRadius: 8, overflow: "hidden", display: "flex", padding: 0, cursor: "pointer", border: huePalette === k ? `2px solid ${t.accent}` : `1px solid ${t.border}`, boxShadow: huePalette === k ? `0 0 0 2px ${t.accentSoft}` : "none", transition: "all 0.15s" }}>{pal.colors.map((c, i) => <div key={i} style={{ flex: 1, background: c, height: "100%" }} />)}</button>)}</div>}
+              <Toggle on={focusMode} onChange={v => { setFocusMode(v); if (!v) setFocusPara(-1); }} label="Focus Mode" icon={Focus} t={t} />
+            </Section>
+
+            <Section title="Reading Guide" icon={MousePointer2} t={t} open={false}>
+              <div style={{ padding: "4px 12px" }}>
+                <Segment options={[{ value: "none", label: "Off", icon: EyeOff }, { value: "highlight", label: "Highlight", icon: Highlighter }, { value: "underline", label: "Line", icon: UnderlineIcon }, { value: "dim", label: "Dim", icon: Eye }]} value={guideMode} onChange={setGuideMode} t={t} />
+              </div>
+              {(guideMode === "highlight" || guideMode === "underline") && (
+                <div style={{ padding: "10px 12px 4px" }}>
+                  <span style={{ fontSize: 12, color: t.fgSoft, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", marginBottom: 8, display: "block" }}>Guide color</span>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {Object.entries(GUIDE_COLORS).map(([k, gc]) => { const active = guideColor === k; const dot = gc.dot || t.accent; return (
+                      <button key={k} onClick={() => setGuideColor(k)} title={gc.label} style={{ width: 28, height: 28, borderRadius: 8, cursor: "pointer", border: active ? `2px solid ${dot}` : `1.5px solid ${t.border}`, background: k === "accent" ? `conic-gradient(from 0deg, ${t.accent}, ${t.accent}88, ${t.accent})` : (gc.highlight || dot), boxShadow: active ? `0 0 0 2px ${dot}33` : "none", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center" }}>{active && <Check size={12} style={{ color: k === "accent" || k === "yellow" || k === "orange" ? "#333" : "#fff" }} />}</button>
+                    ); })}
+                  </div>
+                </div>
+              )}
+            </Section>
+
+            <Section title="Typography" icon={Type} t={t} open={false}>
+              <FontPicker value={fontFamily} onChange={setFontFamily} t={t} />
+              <Slider value={fontSize} min={12} max={36} step={1} onChange={setFontSize} label="Font size" display={fontSize + "px"} t={t} />
+              <Slider value={lineHeight} min={1.0} max={3} step={0.05} onChange={setLineHeight} label="Line height" display={lineHeight.toFixed(2)} t={t} />
+              <Slider value={letterSpacing} min={-1} max={5} step={0.1} onChange={setLetterSpacing} label="Letter spacing" display={letterSpacing.toFixed(1) + "px"} t={t} />
+              <Slider value={wordSpacing} min={0} max={12} step={0.5} onChange={setWordSpacing} label="Word spacing" display={wordSpacing.toFixed(1) + "px"} t={t} />
+              <Slider value={columnWidth} min={40} max={100} step={1} onChange={setColumnWidth} label="Column width" display={columnWidth + "%"} t={t} />
+              <div style={{ padding: "4px 12px 8px" }}>
+                <span style={{ fontSize: 12, color: t.fgSoft, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", marginBottom: 6, display: "block" }}>Text alignment</span>
+                <Segment options={[{ value: "left", label: "Left", icon: AlignLeft }, { value: "center", label: "Center", icon: AlignCenter }, { value: "right", label: "Right", icon: AlignRight }, { value: "justify", label: "Justify", icon: AlignJustify }]} value={textAlign} onChange={setTextAlign} t={t} />
+              </div>
+            </Section>
+
+            <Section title="Theme" icon={Sun} t={t} open={false}>
+              <div style={{ padding: "4px 12px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {Object.entries(THEMES).map(([key, th]) => { const Icon = themeIcons[key]; return (
+                  <button key={key} onClick={() => setTheme(key)} style={{ padding: "6px 12px", borderRadius: 8, cursor: "pointer", border: theme === key ? `2px solid ${t.accent}` : `1px solid ${t.border}`, background: th.surface, display: "flex", alignItems: "center", gap: 5, boxShadow: theme === key ? `0 0 0 2px ${t.accentSoft}` : "none", fontSize: 12, fontWeight: 560, color: th.fg, fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}><Icon size={13} /> {key.charAt(0).toUpperCase() + key.slice(1)}</button>
+                ); })}
+              </div>
+            </Section>
+
+            <div style={{ padding: 14 }}>
+              <button onClick={() => (sub.canUpload || devBypass) ? fileRef.current?.click() : setShowPaywall(true)} style={{ width: "100%", padding: "10px 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 560, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxSizing: "border-box" }}><Upload size={14} /> Upload new file</button>
+              <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => e.target.files?.[0] && attemptUpload(e.target.files[0])} />
+            </div>
+
+            <SidebarRecentDocs recentList={recentDocs.recentList} fileName={fileName} onLoad={loadRecentDoc} onRemove={id => recentDocs.removeDoc(id)} t={t} />
+          </div>
+        )}
+      </div>
+
+      {/* ── READER ── */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, height: "100%", overflow: "hidden" }}>
+        {/* Top bar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderBottom: `1px solid ${t.borderSoft}`, minHeight: 44, background: t.bg }}>
+          {!panelOpen && (<>
+            <button onClick={() => setPanelOpen(true)} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 6, borderRadius: 8 }}><PanelLeft size={18} /></button>
+            <span style={{ fontSize: 14, fontWeight: 620, color: t.fg }}>ReadFlow</span>
+          </>)}
+          <div style={{ flex: 1 }} />
+
+          {/* Chapter navigator */}
+          {hasSections && docSections.length > 1 && (
+            <div style={{ position: "relative" }}>
+              <button id="rf-chapter-btn" onClick={() => setShowChapterNav(!showChapterNav)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: showChapterNav ? t.surface : "transparent", color: t.fgSoft, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>
+                <List size={14} /><span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{docSections.length} {docSections[0]?.type === "page" ? "pages" : "chapters"}</span><ChevronDown size={12} style={{ transform: showChapterNav ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }} />
+              </button>
+              {showChapterNav && (() => { const btn = document.getElementById("rf-chapter-btn"); const rect = btn?.getBoundingClientRect(); return (<>
+                <div onClick={() => setShowChapterNav(false)} style={{ position: "fixed", inset: 0, zIndex: 998 }} />
+                <div style={{ position: "fixed", top: rect ? rect.bottom + 6 : 50, right: rect ? window.innerWidth - rect.right : 16, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", zIndex: 999, maxHeight: "60vh", overflowY: "auto", width: 280 }}>
+                  <div style={{ padding: "10px 14px 8px", borderBottom: `1px solid ${t.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.05em", textTransform: "uppercase" }}>Table of Contents</span><button onClick={() => setShowChapterNav(false)} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 2 }}><X size={14} /></button></div>
+                  {docSections.map((sec, si) => <button key={si} onClick={() => { scrollToSection(si); setShowChapterNav(false); }} onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover} onMouseLeave={e => e.currentTarget.style.background = "transparent"} style={{ width: "100%", padding: "10px 14px", border: "none", cursor: "pointer", background: "transparent", color: t.fg, textAlign: "left", display: "flex", alignItems: "center", gap: 10, borderBottom: si < docSections.length - 1 ? `1px solid ${t.borderSoft}` : "none" }}>
+                    <span style={{ width: 26, height: 26, borderRadius: 7, background: t.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: t.accent, flexShrink: 0, fontFamily: "'DM Sans', sans-serif" }}>{sec.number || si + 1}</span>
+                    <span style={{ fontSize: 13, fontWeight: 550, fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.title || (sec.type === "page" ? `Page ${sec.number || si + 1}` : "Untitled section")}</span>
+                  </button>)}
+                </div>
+              </>); })()}
+            </div>
+          )}
+
+          {sub.isTrial && <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}><Clock size={12} /> Trial — {sub.trialDaysLeft}d left</div>}
+          {sub.isPro && !sub.isTrial && <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}><Crown size={12} /> Pro</div>}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+            {[{ on: neuroDiv, set: setNeuroDiv, icon: Baseline, tip: "NeuroDiv" }, { on: hueGuide, set: setHueGuide, icon: Palette, tip: "HueGuide" }, { on: focusMode, set: v => { setFocusMode(v); if (!v) setFocusPara(-1); }, icon: Focus, tip: "Focus" }].map(({ on, set, icon: Icon, tip }) => (
+              <button key={tip} onClick={() => set(!on)} title={tip} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: on ? t.accentSoft : "transparent", color: on ? t.accent : t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}><Icon size={16} strokeWidth={2} /></button>
+            ))}
+          </div>
+        </div>
+
+        {/* Reader scroll area */}
+        <div ref={readerRef} className="rf-reader-scroll"
+          onMouseMove={e => { guide.handleMouseMove(e, readerRef.current); if (!showGuide && guideMode !== "none") setShowGuide(true); }}
+          onMouseLeave={() => { guide.handleMouseLeave(); setShowGuide(false); }}
+          onScroll={() => guide.handleScroll()}
+          style={{ flex: 1, overflowY: "auto", position: "relative", background: t.reader }}>
+          {guide.renderOverlay(showGuide)}
+          <DocumentBody
+            text={text} docSections={docSections} hasSections={hasSections}
+            neuroDiv={deferredNeuroDiv} neuroDivIntensity={neuroDivIntensity}
+            hueGuide={deferredHueGuide} huePalette={huePalette}
+            focusMode={deferredFocusMode} setFocusPara={setFocusPara}
+            fontSize={fontSize} lineHeight={lineHeight} columnWidth={columnWidth}
+            letterSpacing={letterSpacing} wordSpacing={wordSpacing} textAlign={textAlign}
+            currentFontCss={currentFont?.css} t={t} sectionRefs={sectionRefs}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
