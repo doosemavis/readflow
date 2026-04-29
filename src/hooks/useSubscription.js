@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
 import { FREE_UPLOAD_LIMIT, TRIAL_DAYS } from "../config/constants";
+import { getRolePermissions } from "../config/roles";
 import { storageGet, storageSet } from "../utils/storage";
 
-export function useSubscription() {
+export function useSubscription(role) {
   const [plan, setPlan] = useState("free");
   const [uploadsUsed, setUploadsUsed] = useState(0);
   const [trialStart, setTrialStart] = useState(null);
@@ -33,8 +34,11 @@ export function useSubscription() {
     }));
   }, [plan, trialStart, billingCycle, uploadsUsed, loaded]);
 
-  const isPro = plan === "pro" || plan === "trial";
-  const isTrial = plan === "trial";
+  const permissions = getRolePermissions(role);
+  const adminBypass = permissions.canBypassPaywall;
+
+  const isPro = adminBypass || plan === "pro" || plan === "trial";
+  const isTrial = plan === "trial" && !adminBypass;
   const trialDaysLeft = isTrial && trialStart
     ? Math.max(0, TRIAL_DAYS - Math.floor((Date.now() - trialStart) / 86400000)) : 0;
 
@@ -42,7 +46,8 @@ export function useSubscription() {
     if (loaded && isTrial && trialDaysLeft === 0) { setPlan("pro"); setTrialStart(null); }
   }, [loaded, isTrial, trialDaysLeft]);
 
-  const canUpload = isPro || uploadsUsed < FREE_UPLOAD_LIMIT;
+  const effectiveLimit = adminBypass ? Infinity : (isPro ? Infinity : (permissions.uploadLimit ?? FREE_UPLOAD_LIMIT));
+  const canUpload = uploadsUsed < effectiveLimit;
   const recordUpload = useCallback(() => { if (!isPro) setUploadsUsed(p => p + 1); }, [isPro]);
   const startTrial = useCallback((billing) => { setPlan("trial"); setTrialStart(Date.now()); setBillingCycle(billing); }, []);
   const activatePro = useCallback((billing) => { setPlan("pro"); setBillingCycle(billing); }, []);

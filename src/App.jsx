@@ -12,11 +12,13 @@ import { THEMES, PALETTES, GUIDE_COLORS, FONTS, DEMO_TEXT } from "./config/const
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure } from "./utils";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
+import { useAuth } from "./contexts/AuthContext";
 import {
   Toggle, Slider, Segment, Section, FontPicker,
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
   DocumentBody, useReadingGuide,
   PricingModal, PaywallModal, CheckoutModal,
+  AuthModal, UserMenu, AdminPanel,
 } from "./components";
 
 export default function App() {
@@ -50,8 +52,13 @@ export default function App() {
   const [textAlign, setTextAlign] = useState("left");
   const [theme, setTheme] = useState("warm");
 
+  // ── Auth ──
+  const { role, loading: authLoading } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+
   // ── Subscription & modals ──
-  const sub = useSubscription();
+  const sub = useSubscription(role);
   const recentDocs = useRecentDocs();
   const [showPricing, setShowPricing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -141,12 +148,14 @@ export default function App() {
     {showPricing && <PricingModal onClose={() => setShowPricing(false)} onSelectPlan={handleSelectPlan} hasUsedTrial={sub.isTrial || sub.plan === "pro"} t={t} />}
     {showCheckout && <CheckoutModal billing={checkoutBilling} hasUsedTrial={sub.isTrial || sub.plan === "pro"} onSuccess={handleCheckoutSuccess} onClose={() => setShowCheckout(false)} t={t} />}
     {showPaywall && <PaywallModal uploadsUsed={sub.uploadsUsed} onUpgrade={() => { setShowPaywall(false); setShowPricing(true); }} onClose={() => setShowPaywall(false)} t={t} />}
+    {showAuth && <AuthModal onClose={() => setShowAuth(false)} t={t} />}
+    {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} t={t} />}
   </>);
 
   // ═══════════════════════════════════════════
   // LOADING STATE
   // ═══════════════════════════════════════════
-  if (!sub.loaded) return (
+  if (!sub.loaded || authLoading) return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
       <div style={{ textAlign: "center" }}><BookOpen size={28} style={{ color: t.accent, marginBottom: 10 }} /><p style={{ fontSize: 14, color: t.fgSoft }}>Loading ReadFlow…</p></div>
     </div>
@@ -212,8 +221,8 @@ export default function App() {
 
             <div style={{ padding: "10px 0 2px" }}>
               <UploadBadge sub={sub} onUpgrade={() => setShowPricing(true)} onCancel={() => sub.cancelTrial()} t={t} />
-              {/* DEV ONLY */}
-              <div style={{ padding: "0 14px 4px" }}><button onClick={() => setDevBypass(!devBypass)} style={{ width: "100%", padding: "5px 10px", borderRadius: 7, border: `1px dashed ${devBypass ? "#22C55E" : "#E25C5C"}`, background: devBypass ? "#22C55E12" : "transparent", color: devBypass ? "#22C55E" : "#E25C5C", cursor: "pointer", fontSize: 10, fontWeight: 650, fontFamily: "monospace", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, boxSizing: "border-box" }}>{devBypass ? "✓ DEV: Uploads unlimited" : "⚙ DEV: Disable upload limit"}</button></div>
+              {/* DEV ONLY — admin role only */}
+              {role === "admin" && <div style={{ padding: "0 14px 4px" }}><button onClick={() => setDevBypass(!devBypass)} style={{ width: "100%", padding: "5px 10px", borderRadius: 7, border: `1px dashed ${devBypass ? "#22C55E" : "#E25C5C"}`, background: devBypass ? "#22C55E12" : "transparent", color: devBypass ? "#22C55E" : "#E25C5C", cursor: "pointer", fontSize: 10, fontWeight: 650, fontFamily: "monospace", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, boxSizing: "border-box" }}>{devBypass ? "✓ DEV: Uploads unlimited" : "⚙ DEV: Disable upload limit"}</button></div>}
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${t.borderSoft}`, fontSize: 12, color: t.fgSoft }}>
@@ -313,6 +322,7 @@ export default function App() {
               <button key={tip} onClick={() => set(!on)} title={tip} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: on ? t.accentSoft : "transparent", color: on ? t.accent : t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}><Icon size={16} strokeWidth={2} /></button>
             ))}
           </div>
+          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} />
         </div>
 
         {/* Reader scroll area */}

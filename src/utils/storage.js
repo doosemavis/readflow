@@ -1,17 +1,24 @@
 // Storage adapter — swap this for IndexedDB, Supabase, etc. in production
+let userPrefix = "";
+
+export function setUserScope(userId) { userPrefix = `u:${userId}:`; }
+export function clearUserScope() { userPrefix = ""; }
+
+function scopedKey(key) { return `rf:${userPrefix}${key}`; }
+
 const storageAdapter = {
   async get(key) {
     try {
-      const val = localStorage.getItem(`rf:${key}`);
+      const val = localStorage.getItem(scopedKey(key));
       return val !== null ? { value: val } : null;
     } catch { return null; }
   },
   async set(key, value) {
-    try { localStorage.setItem(`rf:${key}`, value); return { key, value }; }
+    try { localStorage.setItem(scopedKey(key), value); return { key, value }; }
     catch { return null; }
   },
   async delete(key) {
-    try { localStorage.removeItem(`rf:${key}`); return { key, deleted: true }; }
+    try { localStorage.removeItem(scopedKey(key)); return { key, deleted: true }; }
     catch { return null; }
   },
 };

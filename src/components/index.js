@@ -6,3 +6,6 @@ export { useReadingGuide } from "./ReadingGuideOverlay";
 export { default as PricingModal } from "./PricingModal";
 export { default as PaywallModal } from "./PaywallModal";
 export { default as CheckoutModal } from "./CheckoutModal";
+export { default as AuthModal } from "./AuthModal";
+export { default as UserMenu } from "./UserMenu";
+export { default as AdminPanel } from "./AdminPanel";
