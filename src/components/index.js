@@ -9,3 +9,4 @@ export { default as CheckoutModal } from "./CheckoutModal";
 export { default as AuthModal } from "./AuthModal";
 export { default as UserMenu } from "./UserMenu";
 export { default as AdminPanel } from "./AdminPanel";
+export { default as AvatarSettingsModal } from "./AvatarSettingsModal";

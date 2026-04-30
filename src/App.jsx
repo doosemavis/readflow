@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useDeferredValue, useEffect } from "react";
 import {
   Upload, FileText, Type, Palette, Eye, Sun, Moon, SunMedium, BookOpen,
-  ChevronDown, X, Sparkles, Baseline, Coffee, Waves, TreePine,
+  ChevronDown, X, Sparkles, Baseline, Coffee, Waves, TreePine, Gem, Monitor,
   Flame, CloudMoon, CircleDot, Highlighter, Underline as UnderlineIcon,
   EyeOff, MousePointer2, Focus, PanelLeftClose, PanelLeft, Loader2,
   Crown, Clock, Check, List, Hash,
@@ -12,13 +12,14 @@ import { THEMES, PALETTES, GUIDE_COLORS, FONTS, DEMO_TEXT } from "./config/const
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure } from "./utils";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
+import { useAvatar } from "./hooks/useAvatar";
 import { useAuth } from "./contexts/AuthContext";
 import {
   Toggle, Slider, Segment, Section, FontPicker,
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
   DocumentBody, useReadingGuide,
   PricingModal, PaywallModal, CheckoutModal,
-  AuthModal, UserMenu, AdminPanel,
+  AuthModal, UserMenu, AdminPanel, AvatarSettingsModal,
 } from "./components";
 
 export default function App() {
@@ -53,9 +54,21 @@ export default function App() {
   const [theme, setTheme] = useState("warm");
 
   // ── Auth ──
-  const { role, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
+  const { avatar, saveAvatar } = useAvatar(user?.id);
   const [showAuth, setShowAuth] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showAvatarSettings, setShowAvatarSettings] = useState(false);
+
+  // Reset document state on signout
+  useEffect(() => {
+    if (!authLoading && !user) {
+      setText("");
+      setDocSections(null);
+      setFileName("");
+      setFocusPara(-1);
+    }
+  }, [user, authLoading]);
 
   // ── Subscription & modals ──
   const sub = useSubscription(role);
@@ -104,9 +117,10 @@ export default function App() {
 
   const attemptUpload = useCallback((file) => {
     if (!file) return;
+    if (!user) { setShowAuth(true); return; }
     if (!sub.canUpload && !devBypass) { setShowPaywall(true); return; }
     doUpload(file);
-  }, [sub.canUpload, devBypass]);
+  }, [user, sub.canUpload, devBypass]);
 
   const doUpload = useCallback(async (file) => {
     setLoading(true); setLoadMsg("Reading file…");
@@ -141,7 +155,7 @@ export default function App() {
   const handleCheckoutSuccess = useCallback((billing) => { setShowCheckout(false); if (!sub.isTrial && sub.plan === "free") sub.startTrial(billing); else sub.activatePro(billing); }, [sub]);
 
   const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.html,.htm,.csv,.json,.log,.rtf";
-  const themeIcons = { warm: Coffee, cool: Waves, dark: Moon, sepia: SunMedium, midnight: CloudMoon };
+  const themeIcons = { warm: Coffee, cool: Waves, dark: Moon, sepia: SunMedium, midnight: CloudMoon, obsidian: Gem, forest: TreePine, crimson: Flame, phosphor: Monitor, jungle: TreePine };
 
   // ── Modals ──
   const modals = (<>
@@ -150,12 +164,13 @@ export default function App() {
     {showPaywall && <PaywallModal uploadsUsed={sub.uploadsUsed} onUpgrade={() => { setShowPaywall(false); setShowPricing(true); }} onClose={() => setShowPaywall(false)} t={t} />}
     {showAuth && <AuthModal onClose={() => setShowAuth(false)} t={t} />}
     {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} t={t} />}
+    {showAvatarSettings && <AvatarSettingsModal onClose={() => setShowAvatarSettings(false)} onSave={saveAvatar} currentAvatar={avatar} t={t} />}
   </>);
 
   // ═══════════════════════════════════════════
   // LOADING STATE
   // ═══════════════════════════════════════════
-  if (!sub.loaded || authLoading) return (
+  if (!sub.loaded) return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
       <div style={{ textAlign: "center" }}><BookOpen size={28} style={{ color: t.accent, marginBottom: 10 }} /><p style={{ fontSize: 14, color: t.fgSoft }}>Loading ReadFlow…</p></div>
     </div>
@@ -167,6 +182,9 @@ export default function App() {
   if (!text && !loading) return (
     <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif", padding: 24 }}>
       {modals}
+      <div style={{ position: "fixed", top: 14, right: 16, zIndex: 100 }}>
+        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} avatar={avatar} />
+      </div>
       <div style={{ textAlign: "center", maxWidth: 520 }}>
         <div style={{ width: 68, height: 68, borderRadius: 20, background: t.accentSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><BookOpen size={32} style={{ color: t.accent }} /></div>
         <h1 style={{ fontSize: 36, fontWeight: 740, marginBottom: 6, letterSpacing: "-0.025em" }}>ReadFlow</h1>
@@ -322,7 +340,7 @@ export default function App() {
               <button key={tip} onClick={() => set(!on)} title={tip} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: on ? t.accentSoft : "transparent", color: on ? t.accent : t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}><Icon size={16} strokeWidth={2} /></button>
             ))}
           </div>
-          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} />
+          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} avatar={avatar} />
         </div>
 
         {/* Reader scroll area */}
