@@ -1,13 +1,145 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* ── Game button mechanic — all interactive buttons ── */
+button {
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease,
+              filter 0.15s ease, background-color 0.15s ease;
+}
+button:where(:hover:not(:active)) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 0 rgba(0,0,0,0.12);
+  filter: brightness(1.10);
+}
+button:active {
+  transform: translateY(2px) !important;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.12) !important;
+  filter: brightness(0.90);
+  transition: transform 0.07s ease-out, box-shadow 0.07s ease-out,
+              filter 0.07s ease-out !important;
+}
+
+/* Switches, accordion triggers, dropdown triggers — no movement or ledge */
+.rf-static,
+.rf-static:hover,
+.rf-static:active {
+  transform: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+
+/* ── Solid CTA buttons: gradient sheen over accent color ── */
+.rf-btn-solid {
+  background-image: linear-gradient(
+    180deg,
+    rgba(255,255,255,0.42) 0%,
+    rgba(255,255,255,0.14) 32%,
+    rgba(0,0,0,0.00) 55%,
+    rgba(0,0,0,0.16) 100%
+  );
+  box-shadow:
+    inset 0  1px 0 rgba(255,255,255,0.50),
+    inset 0 -1px 0 rgba(0,0,0,0.18),
+    0 4px 0        rgba(0,0,0,0.12);
+}
+.rf-btn-solid:where(:hover:not(:active)) {
+  transform: translateY(-1px);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255,255,255,0.54) 0%,
+    rgba(255,255,255,0.18) 32%,
+    rgba(0,0,0,0.00) 55%,
+    rgba(0,0,0,0.12) 100%
+  );
+  box-shadow:
+    inset 0  1px 0 rgba(255,255,255,0.62),
+    inset 0 -1px 0 rgba(0,0,0,0.15),
+    0 6px 0        rgba(0,0,0,0.12);
+  filter: brightness(1.10);
+}
+.rf-btn-solid:active {
+  transform: translateY(2px) !important;
+  background-image: linear-gradient(
+    180deg,
+    rgba(0,0,0,0.18) 0%,
+    rgba(0,0,0,0.06) 42%,
+    rgba(255,255,255,0.04) 100%
+  ) !important;
+  box-shadow:
+    inset 0  2px 6px rgba(0,0,0,0.22),
+    inset 0 -1px 0   rgba(255,255,255,0.10),
+    0 2px 0          rgba(0,0,0,0.12) !important;
+  filter: brightness(0.90);
+}
+
+/* ── Bubble CTA (PaywallModal) — richer radial dome, same ledge mechanic ── */
+.rf-btn-bubble {
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% 10%,
+      rgba(255,255,255,0.75) 0%, rgba(255,255,255,0.30) 28%, rgba(255,255,255,0.00) 58%),
+    linear-gradient(180deg, rgba(0,0,0,0.00) 46%, rgba(0,0,0,0.22) 100%);
+  box-shadow:
+    inset 0  2px 0 rgba(255,255,255,0.70),
+    inset 0 -2px 0 rgba(0,0,0,0.22),
+    0 4px 0        rgba(0,0,0,0.12);
+}
+.rf-btn-bubble:where(:hover:not(:active)) {
+  transform: translateY(-1px);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% 10%,
+      rgba(255,255,255,0.88) 0%, rgba(255,255,255,0.38) 28%, rgba(255,255,255,0.00) 58%),
+    linear-gradient(180deg, rgba(0,0,0,0.00) 46%, rgba(0,0,0,0.16) 100%);
+  box-shadow:
+    inset 0  2px 0 rgba(255,255,255,0.82),
+    inset 0 -2px 0 rgba(0,0,0,0.18),
+    0 6px 0        rgba(0,0,0,0.12);
+  filter: brightness(1.10);
+}
+.rf-btn-bubble:active {
+  transform: translateY(2px) !important;
+  background-image: linear-gradient(
+    180deg, rgba(0,0,0,0.22) 0%, rgba(0,0,0,0.08) 40%, rgba(255,255,255,0.04) 100%
+  ) !important;
+  box-shadow:
+    inset 0  3px 10px rgba(0,0,0,0.28),
+    inset 0 -2px 0    rgba(255,255,255,0.14),
+    0 2px 0           rgba(0,0,0,0.12) !important;
+  filter: brightness(0.90);
+}
+
+/* ── Toolbar icon toggle buttons ── */
+.rf-btn-icon-active {
+  background-image: radial-gradient(ellipse 80% 60% at 50% 10%,
+    rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.20) 35%, rgba(255,255,255,0.00) 60%);
+  box-shadow:
+    inset 0  1px 0 rgba(255,255,255,0.55),
+    inset 0 -1px 0 rgba(0,0,0,0.18),
+    0 4px 0        rgba(0,0,0,0.12);
+}
+.rf-btn-icon-active:where(:hover:not(:active)) {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0  1px 0 rgba(255,255,255,0.55),
+    inset 0 -1px 0 rgba(0,0,0,0.18),
+    0 6px 0        rgba(0,0,0,0.12);
+  filter: brightness(1.10);
+}
+.rf-btn-icon-active:active {
+  transform: translateY(2px) !important;
+  box-shadow:
+    inset 0  2px 4px rgba(0,0,0,0.20),
+    0 2px 0          rgba(0,0,0,0.12) !important;
+  filter: brightness(0.90);
+}
+
 .rf-btn {
-  transition: all 0.15s ease;
   border: none;
   cursor: pointer;
   box-sizing: border-box;
   font-family: 'DM Sans', sans-serif;
 }
-.rf-btn:active { transform: scale(0.97); }
 
 .rf-reader-scroll { scroll-behavior: smooth; }
 .rf-reader-scroll::-webkit-scrollbar { width: 6px; }

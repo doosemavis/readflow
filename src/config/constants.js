@@ -1,19 +1,21 @@
 export const THEMES = {
   // Light themes — accents darkened for 4.5:1+ contrast; fgSoft deepened for legibility under monochromacy
-  warm:     { bg: "#FDFAF5", reader: "#FFFCF7", fg: "#1C0C04", fgSoft: "#5A4030", accent: "#A85E14", accentSoft: "#A85E1422", surface: "#F5EDE0", surfaceHover: "#EDE3D2", border: "#E8DCC8", borderSoft: "#F0E8D8", icon: "#7A6040" },
-  cool:     { bg: "#F6F8FB", reader: "#FAFBFD", fg: "#0C1220", fgSoft: "#3A5068", accent: "#1556A8", accentSoft: "#1556A822", surface: "#EBF0F7", surfaceHover: "#DCE4EF", border: "#D0DAE7", borderSoft: "#E4EAF2", icon: "#4A6A8A" },
-  sepia:    { bg: "#F1EADB", reader: "#F7F1E4", fg: "#281606", fgSoft: "#5A4830", accent: "#6A4A08", accentSoft: "#6A4A0822", surface: "#E8DFCC", surfaceHover: "#DDD2BC", border: "#D4C5A9", borderSoft: "#E0D6C0", icon: "#7A6445" },
+  // switchOn: color-wheel complement of accent, used for switch track when toggled on
+  warm:     { bg: "#FDFAF5", reader: "#FFFCF7", fg: "#1C0C04", fgSoft: "#5A4030", accent: "#A85E14", accentSoft: "#A85E1422", surface: "#F5EDE0", surfaceHover: "#EDE3D2", border: "#E8DCC8", borderSoft: "#F0E8D8", icon: "#7A6040", switchOn: "#1478A8" },
+  cool:     { bg: "#F6F8FB", reader: "#FAFBFD", fg: "#0C1220", fgSoft: "#3A5068", accent: "#1556A8", accentSoft: "#1556A822", surface: "#EBF0F7", surfaceHover: "#DCE4EF", border: "#D0DAE7", borderSoft: "#E4EAF2", icon: "#4A6A8A", switchOn: "#A85714" },
+  sepia:    { bg: "#F1EADB", reader: "#F7F1E4", fg: "#281606", fgSoft: "#5A4830", accent: "#6A4A08", accentSoft: "#6A4A0822", surface: "#E8DFCC", surfaceHover: "#DDD2BC", border: "#D4C5A9", borderSoft: "#E0D6C0", icon: "#7A6445", switchOn: "#08406A" },
   // forest: pure green → teal-shifted so deuteranopes (green→yellow) still distinguish it from warm/sepia
-  forest:   { bg: "#F2F7F2", reader: "#F7FAF7", fg: "#081808", fgSoft: "#2E542E", accent: "#006652", accentSoft: "#00665222", surface: "#E4EEE4", surfaceHover: "#D5E7D5", border: "#C3D9C3", borderSoft: "#D8E8D8", icon: "#3A7060" },
+  forest:   { bg: "#F2F7F2", reader: "#F7FAF7", fg: "#081808", fgSoft: "#2E542E", accent: "#006652", accentSoft: "#00665222", surface: "#E4EEE4", surfaceHover: "#D5E7D5", border: "#C3D9C3", borderSoft: "#D8E8D8", icon: "#3A7060", switchOn: "#660014" },
   // crimson: pure red → vermilion so protanopes (red→near-black) can still see it via orange luminance
-  crimson:  { bg: "#FBF5F5", reader: "#FEF9F9", fg: "#180404", fgSoft: "#582020", accent: "#B83000", accentSoft: "#B8300022", surface: "#F2E4E4", surfaceHover: "#EAD5D5", border: "#DFC0C0", borderSoft: "#ECCECE", icon: "#804040" },
+  crimson:  { bg: "#FBF5F5", reader: "#FEF9F9", fg: "#180404", fgSoft: "#582020", accent: "#B83000", accentSoft: "#B8300022", surface: "#F2E4E4", surfaceHover: "#EAD5D5", border: "#DFC0C0", borderSoft: "#ECCECE", icon: "#804040", switchOn: "#0088B8" },
   // Dark themes — fgSoft lightened so achromats perceive sufficient luminance step from bg
-  phosphor: { bg: "#080806", reader: "#0D0D09", fg: "#EAE2A8", fgSoft: "#B0A878", accent: "#00C132", accentSoft: "#00C13222", surface: "#141410", surfaceHover: "#1C1C14", border: "#2A2818", borderSoft: "#1E1C10", icon: "#989060" },
+  // switchOn colors brightened for visibility on dark backgrounds
+  phosphor: { bg: "#080806", reader: "#0D0D09", fg: "#EAE2A8", fgSoft: "#B0A878", accent: "#00C132", accentSoft: "#00C13222", surface: "#141410", surfaceHover: "#1C1C14", border: "#2A2818", borderSoft: "#1E1C10", icon: "#989060", switchOn: "#C43298" },
   // jungle: pure bright green → teal so deuteranopes distinguish it from phosphor's yellow-shifted green
-  jungle:   { bg: "#0D1410", reader: "#111A14", fg: "#D4E8D4", fgSoft: "#90B890", accent: "#00C4A0", accentSoft: "#00C4A022", surface: "#172019", surfaceHover: "#1E2C20", border: "#243428", borderSoft: "#1C2A1E", icon: "#5A9880" },
-  dark:     { bg: "#111116", reader: "#18181E", fg: "#ECEAE4", fgSoft: "#A8A4B4", accent: "#E8A94E", accentSoft: "#E8A94E22", surface: "#222230", surfaceHover: "#2E2E3E", border: "#2E2E3E", borderSoft: "#252535", icon: "#8A8898" },
-  midnight: { bg: "#0B0E14", reader: "#0F1219", fg: "#D8E2EA", fgSoft: "#8EA8BE", accent: "#58A6FF", accentSoft: "#58A6FF22", surface: "#161B22", surfaceHover: "#1C2230", border: "#21262D", borderSoft: "#1A1F27", icon: "#5A7898" },
-  obsidian: { bg: "#100E18", reader: "#15131F", fg: "#E8E4F8", fgSoft: "#ACA4C8", accent: "#A78BFA", accentSoft: "#A78BFA22", surface: "#1E1A2E", surfaceHover: "#272340", border: "#2E2844", borderSoft: "#231F38", icon: "#8878B0" },
+  jungle:   { bg: "#0D1410", reader: "#111A14", fg: "#D4E8D4", fgSoft: "#90B890", accent: "#00C4A0", accentSoft: "#00C4A022", surface: "#172019", surfaceHover: "#1E2C20", border: "#243428", borderSoft: "#1C2A1E", icon: "#5A9880", switchOn: "#D6405A" },
+  dark:     { bg: "#111116", reader: "#18181E", fg: "#ECEAE4", fgSoft: "#A8A4B4", accent: "#E8A94E", accentSoft: "#E8A94E22", surface: "#222230", surfaceHover: "#2E2E3E", border: "#2E2E3E", borderSoft: "#252535", icon: "#8A8898", switchOn: "#5590E0" },
+  midnight: { bg: "#0B0E14", reader: "#0F1219", fg: "#D8E2EA", fgSoft: "#8EA8BE", accent: "#58A6FF", accentSoft: "#58A6FF22", surface: "#161B22", surfaceHover: "#1C2230", border: "#21262D", borderSoft: "#1A1F27", icon: "#5A7898", switchOn: "#E09040" },
+  obsidian: { bg: "#100E18", reader: "#15131F", fg: "#E8E4F8", fgSoft: "#ACA4C8", accent: "#A78BFA", accentSoft: "#A78BFA22", surface: "#1E1A2E", surfaceHover: "#272340", border: "#2E2844", borderSoft: "#231F38", icon: "#8878B0", switchOn: "#90C020" },
 };
 
 export const PALETTES = {

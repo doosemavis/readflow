@@ -1,7 +1,11 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { GUIDE_COLORS } from "../config/constants";
 
-export function useReadingGuide({ guideMode, guideColor, fontSize, lineHeight, t }) {
+export function useReadingGuide({ guideMode, guideColor, guideDimOpacity = 0.25, fontSize, lineHeight, t }) {
+  const guideDimOpacityRef = useRef(guideDimOpacity);
+  guideDimOpacityRef.current = guideDimOpacity;
+  const tFgRef = useRef(t.fg);
+  tFgRef.current = t.fg;
   const guideRef = useRef(null);
   const guideRef2 = useRef(null);
   const guideYRef = useRef(0);       // content-relative y (highlight/underline)
@@ -18,8 +22,14 @@ export function useReadingGuide({ guideMode, guideColor, fontSize, lineHeight, t
     } else if (guideMode === "underline" && guideRef.current) {
       guideRef.current.style.transform = `translateY(${y + 2}px)`;
     } else if (guideMode === "dim" && guideRef.current) {
+      const op = guideDimOpacityRef.current;
+      const alpha = Math.round(op * 255).toString(16).padStart(2, "0");
+      const blur = `blur(${(op * 5).toFixed(1)}px)`;
       guideRef.current.style.top = `${clientY + lh * 0.5}px`;
       guideRef.current.style.left = `${readerLeftRef.current}px`;
+      guideRef.current.style.background = `${tFgRef.current}${alpha}`;
+      guideRef.current.style.backdropFilter = blur;
+      guideRef.current.style.webkitBackdropFilter = blur;
     }
   }, [guideMode, fontSize, lineHeight]);
 
@@ -50,6 +60,16 @@ export function useReadingGuide({ guideMode, guideColor, fontSize, lineHeight, t
     rafRef.current = requestAnimationFrame(() => applyPositions(y, clientYRef.current));
   }, [guideMode, applyPositions]);
 
+  useEffect(() => {
+    if (guideMode === "dim" && guideRef.current) {
+      const alpha = Math.round(guideDimOpacity * 255).toString(16).padStart(2, "0");
+      const blur = `blur(${(guideDimOpacity * 5).toFixed(1)}px)`;
+      guideRef.current.style.background = `${t.fg}${alpha}`;
+      guideRef.current.style.backdropFilter = blur;
+      guideRef.current.style.webkitBackdropFilter = blur;
+    }
+  }, [guideDimOpacity, guideMode, t.fg]);
+
   const handleMouseLeave = useCallback(() => {
     showGuideRef.current = false;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -70,7 +90,7 @@ export function useReadingGuide({ guideMode, guideColor, fontSize, lineHeight, t
     if (guideMode === "dim") return (
       // position: fixed keeps the cover anchored to the viewport during scroll
       // left is constrained to the reader element's left edge to exclude the sidebar
-      <div ref={guideRef} style={{ position: "fixed", left: readerLeftRef.current, right: 0, top: cy + lh * 0.5, bottom: 0, pointerEvents: "none", background: `${t.fg}40`, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", willChange: "top", zIndex: 10 }} />
+      <div ref={guideRef} style={{ position: "fixed", left: readerLeftRef.current, right: 0, top: cy + lh * 0.5, bottom: 0, pointerEvents: "none", background: `${t.fg}${Math.round(guideDimOpacity * 255).toString(16).padStart(2, "0")}`, backdropFilter: `blur(${(guideDimOpacity * 5).toFixed(1)}px)`, WebkitBackdropFilter: `blur(${(guideDimOpacity * 5).toFixed(1)}px)`, willChange: "top", zIndex: 10 }} />
     );
     return null;
   };

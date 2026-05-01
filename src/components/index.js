@@ -1,4 +1,4 @@
-export { Toggle, Slider, Segment, Section, FontPicker } from "./Primitives";
+export { Toggle, Slider, Segment, Section, FontPicker, Tip } from "./Primitives";
 export { default as UploadBadge } from "./UploadBadge";
 export { SidebarRecentDocs, LandingRecentDocs } from "./RecentDocsList";
 export { default as DocumentBody } from "./DocumentBody";

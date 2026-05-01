@@ -1,19 +1,14 @@
 import { useRef } from "react";
 import { X, Upload } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
+
+const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1010 };
 
 export const PREMADE_AVATARS = [
-  { id: "p1",  bg: "#6366F1" },
-  { id: "p2",  bg: "#EC4899" },
-  { id: "p3",  bg: "#F59E0B" },
-  { id: "p4",  bg: "#10B981" },
-  { id: "p5",  bg: "#3B82F6" },
-  { id: "p6",  bg: "#8B5CF6" },
-  { id: "p7",  bg: "#EF4444" },
-  { id: "p8",  bg: "#0EA5E9" },
-  { id: "p9",  bg: "#14B8A6" },
-  { id: "p10", bg: "#F97316" },
-  { id: "p11", bg: "#6B7280" },
-  { id: "p12", bg: "#BE185D" },
+  { id: "p1",  bg: "#6366F1" }, { id: "p2",  bg: "#EC4899" }, { id: "p3",  bg: "#F59E0B" },
+  { id: "p4",  bg: "#10B981" }, { id: "p5",  bg: "#3B82F6" }, { id: "p6",  bg: "#8B5CF6" },
+  { id: "p7",  bg: "#EF4444" }, { id: "p8",  bg: "#0EA5E9" }, { id: "p9",  bg: "#14B8A6" },
+  { id: "p10", bg: "#F97316" }, { id: "p11", bg: "#6B7280" }, { id: "p12", bg: "#BE185D" },
 ];
 
 const SHAPES = {
@@ -55,46 +50,45 @@ export default function AvatarSettingsModal({ onClose, onSave, currentAvatar, t 
   const currentId = currentAvatar?.type === "premade" ? currentAvatar.id : null;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1010, padding: 24 }}>
-      <div style={{ background: t.bg, borderRadius: 20, width: "100%", maxWidth: 400, padding: 24, position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
-        <button onClick={onClose} style={{ position: "absolute", top: 14, right: 14, background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 4, borderRadius: 6 }}><X size={16} /></button>
-
-        <h2 style={{ fontSize: 17, fontWeight: 720, color: t.fg, marginBottom: 4, fontFamily: "'DM Sans', sans-serif" }}>Choose Avatar</h2>
-        <p style={{ fontSize: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", marginBottom: 18 }}>Pick a preset or upload your own image.</p>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 20 }}>
-          {PREMADE_AVATARS.map(preset => {
-            const isActive = currentId === preset.id;
-            return (
-              <button
-                key={preset.id}
-                onClick={() => { onSave({ type: "premade", id: preset.id, bg: preset.bg }); onClose(); }}
-                style={{ padding: 0, border: isActive ? `3px solid ${t.accent}` : "3px solid transparent", borderRadius: 12, cursor: "pointer", background: "none", transition: "transform 0.1s", display: "block" }}
-                onMouseEnter={e => e.currentTarget.style.transform = "scale(1.1)"}
-                onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-              >
-                <PremadeAvatarSvg id={preset.id} bg={preset.bg} size={46} borderRadius={8} />
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-          <div style={{ flex: 1, height: 1, background: t.border }} />
-          <span style={{ fontSize: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif" }}>or upload your own</span>
-          <div style={{ flex: 1, height: 1, background: t.border }} />
-        </div>
-
-        <button
-          onClick={() => fileRef.current?.click()}
-          style={{ width: "100%", padding: "10px", borderRadius: 10, border: `1px dashed ${t.border}`, background: t.surface, color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxSizing: "border-box" }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = t.accent}
-          onMouseLeave={e => e.currentTarget.style.borderColor = t.border}
+    <Dialog.Root open onOpenChange={o => { if (!o) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay style={OVERLAY} />
+        <Dialog.Content
+          aria-describedby={undefined}
+          style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", background: t.bg, borderRadius: 20, maxWidth: 400, width: "calc(100% - 48px)", padding: 24, boxShadow: "0 20px 60px rgba(0,0,0,0.25)", zIndex: 1011, outline: "none" }}
         >
-          <Upload size={14} /> Upload image (JPG, PNG — max 2MB)
-        </button>
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: "none" }} onChange={handleFile} />
-      </div>
-    </div>
+          <Dialog.Close asChild>
+            <button style={{ position: "absolute", top: 14, right: 14, background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: "4px 8px", borderRadius: 6 }}>
+              <X size={16} />
+            </button>
+          </Dialog.Close>
+
+          <Dialog.Title style={{ fontSize: 16, fontWeight: 720, color: t.fg, margin: "0 0 16px", fontFamily: "'DM Sans', sans-serif" }}>
+            Choose avatar
+          </Dialog.Title>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 16 }}>
+            {PREMADE_AVATARS.map(({ id, bg }) => (
+              <button
+                key={id}
+                onClick={() => { onSave({ type: "premade", id, bg }); onClose(); }}
+                style={{ padding: 0, border: currentId === id ? `3px solid ${t.accent}` : "3px solid transparent", borderRadius: 14, cursor: "pointer", background: "none", boxShadow: currentId === id ? `0 0 0 2px ${t.accentSoft}` : "none", transition: "all 0.15s" }}
+                aria-label={`Select avatar ${id}`}
+              >
+                <PremadeAvatarSvg id={id} bg={bg} size={44} borderRadius={10} />
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => fileRef.current?.click()}
+            style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px dashed ${t.border}`, background: "transparent", color: t.fgSoft, cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxSizing: "border-box" }}
+          >
+            <Upload size={14} /> Upload image
+          </button>
+          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: "none" }} onChange={handleFile} />
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

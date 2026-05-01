@@ -7,6 +7,7 @@ import {
   Crown, Clock, Check, List, Hash,
   AlignLeft, AlignCenter, AlignRight, AlignJustify
 } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 import { THEMES, PALETTES, GUIDE_COLORS, FONTS, DEMO_TEXT } from "./config/constants";
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure } from "./utils";
@@ -15,7 +16,7 @@ import { useRecentDocs } from "./hooks/useRecentDocs";
 import { useAvatar } from "./hooks/useAvatar";
 import { useAuth } from "./contexts/AuthContext";
 import {
-  Toggle, Slider, Segment, Section, FontPicker,
+  Toggle, Slider, Segment, Section, FontPicker, Tip,
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
   DocumentBody, useReadingGuide,
   PricingModal, PaywallModal, CheckoutModal,
@@ -40,6 +41,7 @@ export default function App() {
   const [huePalette, setHuePalette] = useState("ocean");
   const [focusMode, setFocusMode] = useState(false);
   const [focusPara, setFocusPara] = useState(-1);
+  const [guideDimOpacity, setGuideDimOpacity] = useState(0.25);
   const [guideMode, setGuideMode] = useState("none");
   const [guideColor, setGuideColor] = useState("yellow");
 
@@ -108,7 +110,7 @@ export default function App() {
   }, [focusMode, focusPara]);
 
   // ── Reading guide hook ──
-  const guide = useReadingGuide({ guideMode, guideColor, fontSize, lineHeight, t });
+  const guide = useReadingGuide({ guideMode, guideColor, guideDimOpacity, fontSize, lineHeight, t });
 
   // ── Handlers ──
   const scrollToSection = useCallback((idx) => {
@@ -200,12 +202,16 @@ export default function App() {
           <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => e.target.files?.[0] && attemptUpload(e.target.files[0])} />
         </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-          <button onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); }} style={{ padding: "10px 28px", borderRadius: 10, border: `1px solid ${t.border}`, background: "transparent", color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 560, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><FileText size={14} /> Try demo article</button>
+          <button onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); }} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: t.surface, color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><FileText size={14} /> Try demo article</button>
           {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: t.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><Crown size={14} /> See Pro plans</button>}
         </div>
         <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} t={t} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 40 }}>
-          {Object.entries(THEMES).map(([key, th]) => <button key={key} onClick={() => setTheme(key)} title={key} style={{ width: 26, height: 26, borderRadius: 13, background: th.accent, cursor: "pointer", border: theme === key ? `2.5px solid ${t.fg}` : "2.5px solid transparent", boxShadow: theme === key ? `0 0 0 2.5px ${t.bg}` : "none", transition: "all 0.15s" }} />)}
+          {Object.entries(THEMES).map(([key, th]) => (
+            <Tip key={key} label={key[0].toUpperCase() + key.slice(1)} t={t} side="top">
+              <button onClick={() => setTheme(key)} style={{ width: 26, height: 26, borderRadius: 13, background: th.accent, cursor: "pointer", border: theme === key ? `2.5px solid ${t.fg}` : "2.5px solid transparent", boxShadow: theme === key ? `0 0 0 2.5px ${t.bg}` : "none", transition: "all 0.15s" }} />
+            </Tip>
+          ))}
         </div>
       </div>
     </div>
@@ -260,6 +266,7 @@ export default function App() {
               <div style={{ padding: "4px 12px" }}>
                 <Segment options={[{ value: "none", label: "Off", icon: EyeOff }, { value: "highlight", label: "Highlight", icon: Highlighter }, { value: "underline", label: "Line", icon: UnderlineIcon }, { value: "dim", label: "Dim", icon: Eye }]} value={guideMode} onChange={setGuideMode} t={t} />
               </div>
+              {guideMode === "dim" && <Slider value={guideDimOpacity} min={0.05} max={0.7} step={0.01} onChange={setGuideDimOpacity} label="Dim opacity" display={Math.round(guideDimOpacity * 100) + "%"} t={t} />}
               {(guideMode === "highlight" || guideMode === "underline") && (
                 <div style={{ padding: "10px 12px 4px" }}>
                   <span style={{ fontSize: 12, color: t.fgSoft, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", marginBottom: 8, display: "block" }}>Guide color</span>
@@ -294,7 +301,7 @@ export default function App() {
             </Section>
 
             <div style={{ padding: 14 }}>
-              <button onClick={() => (sub.canUpload || devBypass) ? fileRef.current?.click() : setShowPaywall(true)} style={{ width: "100%", padding: "10px 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 560, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxSizing: "border-box" }}><Upload size={14} /> Upload new file</button>
+              <button onClick={() => (sub.canUpload || devBypass) ? fileRef.current?.click() : setShowPaywall(true)} className="rf-btn" style={{ width: "100%", padding: "10px 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 560, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxSizing: "border-box" }}><Upload size={14} /> Upload new file</button>
               <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => e.target.files?.[0] && attemptUpload(e.target.files[0])} />
             </div>
 
@@ -306,7 +313,7 @@ export default function App() {
       {/* ── READER ── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, height: "100%", overflow: "hidden" }}>
         {/* Top bar */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderBottom: `1px solid ${t.borderSoft}`, minHeight: 44, background: t.bg }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "8px 16px", borderBottom: `1px solid ${t.borderSoft}`, minHeight: 44, background: t.bg }}>
           {!panelOpen && (<>
             <button onClick={() => setPanelOpen(true)} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 6, borderRadius: 8 }}><PanelLeft size={18} /></button>
             <span style={{ fontSize: 14, fontWeight: 620, color: t.fg }}>ReadFlow</span>
@@ -315,29 +322,48 @@ export default function App() {
 
           {/* Chapter navigator */}
           {hasSections && docSections.length > 1 && (
-            <div style={{ position: "relative" }}>
-              <button id="rf-chapter-btn" onClick={() => setShowChapterNav(!showChapterNav)} style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: showChapterNav ? t.surface : "transparent", color: t.fgSoft, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>
-                <List size={14} /><span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{docSections.length} {docSections[0]?.type === "page" ? "pages" : "chapters"}</span><ChevronDown size={12} style={{ transform: showChapterNav ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }} />
-              </button>
-              {showChapterNav && (() => { const btn = document.getElementById("rf-chapter-btn"); const rect = btn?.getBoundingClientRect(); return (<>
-                <div onClick={() => setShowChapterNav(false)} style={{ position: "fixed", inset: 0, zIndex: 998 }} />
-                <div style={{ position: "fixed", top: rect ? rect.bottom + 6 : 50, right: rect ? window.innerWidth - rect.right : 16, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", zIndex: 999, maxHeight: "60vh", overflowY: "auto", width: 280 }}>
-                  <div style={{ padding: "10px 14px 8px", borderBottom: `1px solid ${t.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.05em", textTransform: "uppercase" }}>Table of Contents</span><button onClick={() => setShowChapterNav(false)} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 2 }}><X size={14} /></button></div>
-                  {docSections.map((sec, si) => <button key={si} onClick={() => { scrollToSection(si); setShowChapterNav(false); }} onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover} onMouseLeave={e => e.currentTarget.style.background = "transparent"} style={{ width: "100%", padding: "10px 14px", border: "none", cursor: "pointer", background: "transparent", color: t.fg, textAlign: "left", display: "flex", alignItems: "center", gap: 10, borderBottom: si < docSections.length - 1 ? `1px solid ${t.borderSoft}` : "none" }}>
-                    <span style={{ width: 26, height: 26, borderRadius: 7, background: t.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: t.accent, flexShrink: 0, fontFamily: "'DM Sans', sans-serif" }}>{sec.number || si + 1}</span>
-                    <span style={{ fontSize: 13, fontWeight: 550, fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.title || (sec.type === "page" ? `Page ${sec.number || si + 1}` : "Untitled section")}</span>
-                  </button>)}
-                </div>
-              </>); })()}
-            </div>
+            <DropdownMenu.Root open={showChapterNav} onOpenChange={setShowChapterNav}>
+              <DropdownMenu.Trigger asChild>
+                <button className="rf-static" style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: showChapterNav ? t.surface : "transparent", color: t.fgSoft, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", outline: "none" }}>
+                  <List size={14} />
+                  <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{docSections.length} {docSections[0]?.type === "page" ? "pages" : "chapters"}</span>
+                  <ChevronDown size={12} style={{ transform: showChapterNav ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }} />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  align="end"
+                  sideOffset={6}
+                  style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", maxHeight: "60vh", overflowY: "auto", width: 280, zIndex: 999, outline: "none" }}
+                >
+                  <div style={{ padding: "10px 14px 8px", borderBottom: `1px solid ${t.borderSoft}` }}>
+                    <span style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.05em", textTransform: "uppercase" }}>Table of Contents</span>
+                  </div>
+                  {docSections.map((sec, si) => (
+                    <DropdownMenu.Item
+                      key={si}
+                      onSelect={() => scrollToSection(si)}
+                      onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                      style={{ padding: "10px 14px", cursor: "pointer", color: t.fg, display: "flex", alignItems: "center", gap: 10, borderBottom: si < docSections.length - 1 ? `1px solid ${t.borderSoft}` : "none", outline: "none", userSelect: "none" }}
+                    >
+                      <span style={{ width: 26, height: 26, borderRadius: 7, background: t.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: t.accent, flexShrink: 0, fontFamily: "'DM Sans', sans-serif" }}>{sec.number || si + 1}</span>
+                      <span style={{ fontSize: 13, fontWeight: 550, fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.title || (sec.type === "page" ? `Page ${sec.number || si + 1}` : "Untitled section")}</span>
+                    </DropdownMenu.Item>
+                  ))}
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           )}
 
           {sub.isTrial && <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}><Clock size={12} /> Trial — {sub.trialDaysLeft}d left</div>}
           {sub.isPro && !sub.isTrial && <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}><Crown size={12} /> Pro</div>}
 
-          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             {[{ on: neuroDiv, set: setNeuroDiv, icon: Baseline, tip: "NeuroDiv" }, { on: hueGuide, set: setHueGuide, icon: Palette, tip: "HueGuide" }, { on: focusMode, set: v => { setFocusMode(v); if (!v) setFocusPara(-1); }, icon: Focus, tip: "Focus" }].map(({ on, set, icon: Icon, tip }) => (
-              <button key={tip} onClick={() => set(!on)} title={tip} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: on ? t.accentSoft : "transparent", color: on ? t.accent : t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}><Icon size={16} strokeWidth={2} /></button>
+              <Tip key={tip} label={tip} t={t} side="bottom">
+                <button onClick={() => set(!on)} className={on ? "rf-btn-icon-active" : ""} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: on ? t.accent : "transparent", color: on ? "#fff" : t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon size={16} strokeWidth={2} /></button>
+              </Tip>
             ))}
           </div>
           <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} avatar={avatar} />
