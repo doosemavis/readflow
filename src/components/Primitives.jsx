@@ -166,10 +166,10 @@ export function Section({ title, icon: Icon, children, t, open: defaultOpen = tr
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 650, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "'DM Sans', sans-serif" }}>
             <Icon size={14} strokeWidth={2.2} style={{ color: t.icon }} />{title}
           </span>
-          <ChevronDown size={14} style={{ color: t.icon, transform: open ? "rotate(0)" : "rotate(-90deg)", transition: "transform 0.2s" }} />
+          <ChevronDown size={14} style={{ color: t.icon, transform: open ? "rotate(0)" : "rotate(-90deg)", transition: "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)" }} />
         </button>
       </Collapsible.Trigger>
-      <Collapsible.Content>
+      <Collapsible.Content className="rf-collapsible-content">
         <div style={{ paddingBottom: 10 }}>{children}</div>
       </Collapsible.Content>
     </Collapsible.Root>

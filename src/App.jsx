@@ -1,10 +1,9 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from "react";
 import {
-  Upload, FileText, Type, Palette, Eye, Sun, Moon, SunMedium, BookOpen,
-  ChevronDown, X, Sparkles, Baseline, Coffee, Waves, TreePine, Gem, Monitor,
-  Flame, CloudMoon, CircleDot, Highlighter, Underline as UnderlineIcon,
+  Upload, FileText, Type, Palette, Eye, Sun, Moon, BookOpen,
+  ChevronDown, X, Sparkles, Baseline, Highlighter, Underline as UnderlineIcon,
   EyeOff, MousePointer2, Focus, PanelLeftClose, PanelLeft, Loader2,
-  Crown, Clock, Check, List, Hash,
+  Crown, Clock, Check, List,
   AlignLeft, AlignCenter, AlignRight, AlignJustify
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -17,6 +16,12 @@ const FMT_LH = v => v.toFixed(2);
 const FMT_FIXED1_PX = v => `${v.toFixed(1)}px`;
 const FMT_PCT = v => `${v}%`;
 const FMT_PCT_FROM_FRAC = v => `${Math.round(v * 100)}%`;
+
+// Theme picker layout: left column = light themes, right column = dark themes (5 + 5).
+// Render order is light-first-then-dark; grid-auto-flow: column with 5 rows places them
+// in two visual columns. Add new themes to the appropriate array — order within each is the row order.
+const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
+const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure } from "./utils";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
@@ -245,7 +250,6 @@ export default function App() {
   const handleCheckoutSuccess = useCallback((billing) => { setShowCheckout(false); if (!sub.isTrial && sub.plan === "free") sub.startTrial(billing); else sub.activatePro(billing); }, [sub]);
 
   const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.html,.htm,.csv,.json,.log,.rtf";
-  const themeIcons = { warm: Coffee, cool: Waves, dark: Moon, sepia: SunMedium, midnight: CloudMoon, obsidian: Gem, forest: TreePine, crimson: Flame, phosphor: Monitor, jungle: TreePine };
 
   // ── Modals ──
   const modals = (<>
@@ -383,10 +387,53 @@ export default function App() {
             </Section>
 
             <Section title="Theme" icon={Sun} t={t} open={false}>
-              <div style={{ padding: "4px 12px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {Object.entries(THEMES).map(([key, th]) => { const Icon = themeIcons[key]; return (
-                  <button key={key} onClick={() => setTheme(key)} style={{ padding: "6px 12px", borderRadius: 8, cursor: "pointer", border: theme === key ? `2px solid ${t.accent}` : `1px solid ${t.border}`, background: th.surface, display: "flex", alignItems: "center", gap: 5, boxShadow: theme === key ? `0 0 0 2px ${t.accentSoft}` : "none", fontSize: 12, fontWeight: 560, color: th.fg, fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}><Icon size={13} /> {key.charAt(0).toUpperCase() + key.slice(1)}</button>
-                ); })}
+              <div style={{ padding: "6px 12px 4px", display: "grid", gridTemplateColumns: "1fr 1fr", gridAutoFlow: "column", gridTemplateRows: "repeat(5, auto)", gap: 10 }}>
+                {[...LIGHT_THEME_KEYS, ...DARK_THEME_KEYS].map(key => {
+                  const th = THEMES[key];
+                  const isActive = theme === key;
+                  const isDark = DARK_THEME_KEYS.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setTheme(key)}
+                      className="rf-btn-icon-active"
+                      style={{
+                        padding: "9px 14px",
+                        borderRadius: 10,
+                        border: isActive ? `2px solid ${t.accent}` : "2px solid transparent",
+                        backgroundColor: th.bg,
+                        // Suppress the rf-btn-icon-active radial white highlight on dark tiles
+                        // (it reads as a glaring shine on dark backgrounds). Light tiles keep it
+                        // because there it adds a subtle paper-like sheen.
+                        backgroundImage: isDark ? "none" : undefined,
+                        color: th.fg,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        minHeight: 40,
+                        fontFamily: "'DM Sans', sans-serif",
+                        boxSizing: "border-box",
+                        outline: "none",
+                        transition: "transform 0.15s, box-shadow 0.15s, filter 0.15s, border-color 0.15s",
+                      }}
+                    >
+                      <span style={{ fontSize: 12, fontWeight: 600, color: th.fg, textTransform: "capitalize", letterSpacing: "0.02em", textAlign: "left" }}>{key}</span>
+                      <span style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        background: th.accent,
+                        flexShrink: 0,
+                        border: isActive ? `2px solid ${th.fg}` : "2px solid transparent",
+                        boxShadow: isActive ? `0 0 0 2px ${th.bg}` : "none",
+                        boxSizing: "border-box",
+                        transition: "border-color 0.15s, box-shadow 0.15s",
+                      }} />
+                    </button>
+                  );
+                })}
               </div>
             </Section>
 

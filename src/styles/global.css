@@ -173,6 +173,27 @@ button:active {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Sidebar collapsible sections — slide animation driven by Radix's
+   --radix-collapsible-content-height var. overflow:hidden clips the
+   collapsing content; popovers/tooltips inside are unaffected because
+   they render via Radix Portals (outside this element). */
+@keyframes rf-slide-down {
+  from { height: 0; opacity: 0; }
+  to   { height: var(--radix-collapsible-content-height); opacity: 1; }
+}
+@keyframes rf-slide-up {
+  from { height: var(--radix-collapsible-content-height); opacity: 1; }
+  to   { height: 0; opacity: 0; }
+}
+.rf-collapsible-content { overflow: hidden; }
+.rf-collapsible-content[data-state="open"]   { animation: rf-slide-down 320ms cubic-bezier(0.4, 0, 0.2, 1); }
+.rf-collapsible-content[data-state="closed"] { animation: rf-slide-up   280ms cubic-bezier(0.4, 0, 0.2, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-collapsible-content[data-state="open"],
+  .rf-collapsible-content[data-state="closed"] { animation: none; }
+}
+
 @font-face {
   font-family: 'OpenDyslexic';
   src: url('https://cdn.jsdelivr.net/gh/antijingoist/opendyslexic@master/compiled/OpenDyslexic-Regular.woff2') format('woff2'),
