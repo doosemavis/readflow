@@ -1,4 +1,4 @@
-import { useState, memo } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { ChevronDown } from "lucide-react";
 import { FONTS } from "../config/constants";
 import * as Switch from "@radix-ui/react-switch";
@@ -46,19 +46,41 @@ export const Toggle = memo(function Toggle({ on, onChange, label, icon: Icon, t 
   );
 });
 
-export const Slider = memo(function Slider({ value, min, max, step, onChange, label, display, t }) {
+// Slider keeps the thumb position in local state during drag so it tracks the cursor at native input
+// speed regardless of App's render cost. onChange commits the final value upward only on release.
+// onLiveChange (optional) fires every tick — used for direct DOM writes (CSS var on the doc wrapper)
+// so the document updates AS the user drags without any App state churn.
+export const Slider = memo(function Slider({ value, min, max, step, onChange, onLiveChange, label, format, t }) {
+  const [localValue, setLocalValue] = useState(value);
+  const draggingRef = useRef(false);
+
+  // Sync external value changes (e.g. theme reset) into local state — but never mid-drag.
+  useEffect(() => {
+    if (!draggingRef.current) setLocalValue(value);
+  }, [value]);
+
+  const display = format ? format(localValue) : localValue;
+
   return (
     <div style={{ padding: "6px 12px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
         <span style={{ fontSize: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontWeight: 500 }}>{label}</span>
-        <span style={{ fontSize: 12, color: t.accent, fontFamily: "'DM Sans', sans-serif", fontWeight: 600, minWidth: 40, textAlign: "right" }}>{display ?? value}</span>
+        <span style={{ fontSize: 12, color: t.accent, fontFamily: "'DM Sans', sans-serif", fontWeight: 600, minWidth: 40, textAlign: "right" }}>{display}</span>
       </div>
       <SliderPrimitive.Root
-        value={[value]}
+        value={[localValue]}
         min={min}
         max={max}
         step={step}
-        onValueChange={([v]) => onChange(v)}
+        onValueChange={([v]) => {
+          draggingRef.current = true;
+          setLocalValue(v);
+          if (onLiveChange) onLiveChange(v);
+        }}
+        onValueCommit={([v]) => {
+          draggingRef.current = false;
+          onChange(v);
+        }}
         style={{ position: "relative", display: "flex", alignItems: "center", userSelect: "none", touchAction: "none", height: 24 }}
       >
         <SliderPrimitive.Track style={{ position: "relative", flexGrow: 1, height: 4, borderRadius: 2, background: t.border }}>

@@ -149,7 +149,16 @@ button:active {
 
 .rf-no-select { user-select: none; -webkit-user-select: none; }
 
-.rf-para { opacity: 1; transition: opacity 0.35s ease; }
+/* Paint/layout containment on the document tree:
+   - rf-doc-wrapper isolates the document subtree's layout/paint from the rest of the page.
+   - rf-section uses content-visibility:auto so off-screen sections skip layout/paint entirely.
+     contain-intrinsic-size keeps a placeholder height so the scrollbar / scroll position stays sensible.
+   - rf-para gets the same treatment for plain-text docs (no Section wrappers).
+   The browser remembers the actual measured size after first render (the `auto` keyword). */
+.rf-doc-wrapper { contain: layout style paint; }
+.rf-section { content-visibility: auto; contain-intrinsic-size: auto 1200px; }
+
+.rf-para { opacity: 1; transition: opacity 0.35s ease; content-visibility: auto; contain-intrinsic-size: auto 120px; }
 
 /* FocusMode: cursor activated by CSS class, not re-render */
 .rf-focus-mode .rf-para { cursor: pointer; }

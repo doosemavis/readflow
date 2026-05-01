@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useDeferredValue, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from "react";
 import {
   Upload, FileText, Type, Palette, Eye, Sun, Moon, SunMedium, BookOpen,
   ChevronDown, X, Sparkles, Baseline, Coffee, Waves, TreePine, Gem, Monitor,
@@ -10,6 +10,13 @@ import {
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 import { THEMES, PALETTES, GUIDE_COLORS, FONTS, DEMO_TEXT } from "./config/constants";
+
+// Stable Slider format helpers (module-level so memo on Slider isn't busted each App render).
+const FMT_PX = v => `${v}px`;
+const FMT_LH = v => v.toFixed(2);
+const FMT_FIXED1_PX = v => `${v.toFixed(1)}px`;
+const FMT_PCT = v => `${v}%`;
+const FMT_PCT_FROM_FRAC = v => `${Math.round(v * 100)}%`;
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure } from "./utils";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
@@ -87,18 +94,40 @@ export default function App() {
   const fileRef = useRef();
   const readerRef = useRef();
   const sectionRefs = useRef({});
+  const docWrapperRef = useRef(null);
+  const typographyRafRef = useRef(null);
 
   // ── Derived ──
   const t = THEMES[theme];
   const currentFont = FONTS.find(f => f.name === fontFamily);
   const hasSections = docSections && docSections.length > 0 && (docSections.length > 1 || docSections[0]?.title);
 
-  // ── Deferred enhancement values ──
-  // React commits the urgent render (toggle visual) first, then updates DocumentBody
-  // concurrently in the background — toggle is instantaneous from the user's perspective.
-  const deferredNeuroDiv = useDeferredValue(neuroDiv);
-  const deferredHueGuide = useDeferredValue(hueGuide);
-  const deferredFocusMode = useDeferredValue(focusMode);
+  // ── Feature toggles (NeuroDiv/HueGuide/Focus) flip a CSS class on the document inner div via ref.
+  //     Single className write, no React reconciliation through the Section subtree. ──
+  const featureClassRef = useRef(null);
+  const featureStateRef = useRef({ neuroDiv, hueGuide, focusMode });
+  featureStateRef.current = { neuroDiv, hueGuide, focusMode };
+  // Latest focusMode for descendant onMouseEnter callbacks — read at hover time, never drives re-render.
+  const focusModeRef = useRef(focusMode);
+  focusModeRef.current = focusMode;
+
+  const writeFeatureClass = useCallback(() => {
+    const el = featureClassRef.current;
+    if (!el) return;
+    const s = featureStateRef.current;
+    el.className = [s.neuroDiv && "rf-neurodiv", s.hueGuide && "rf-hueguide", s.focusMode && "rf-focus-mode"].filter(Boolean).join(" ");
+  }, []);
+
+  // Callback ref: writes the feature class synchronously on mount so initial DOM state is correct.
+  const handleFeatureClassRef = useCallback((el) => {
+    featureClassRef.current = el;
+    if (el) writeFeatureClass();
+  }, [writeFeatureClass]);
+
+  // Toggle-driven updates: synchronous className write before paint — click-to-visual on the same frame.
+  useLayoutEffect(() => {
+    if (featureClassRef.current) writeFeatureClass();
+  }, [neuroDiv, hueGuide, focusMode, writeFeatureClass]);
 
   // ── Focus style management (kept here so DocumentBody never re-renders for focusPara changes) ──
   const focusStyleRef = useRef(null);
@@ -111,6 +140,65 @@ export default function App() {
 
   // ── Reading guide hook ──
   const guide = useReadingGuide({ guideMode, guideColor, guideDimOpacity, fontSize, lineHeight, t });
+
+  // ── Typography → CSS vars written directly to the document wrapper via ref.
+  //     Bypasses React entirely on slider drags; rAF coalesces multiple input events per frame. ──
+  const currentFontCss = currentFont?.css;
+
+  // Latest typography snapshot, kept on a stable ref so writeTypographyVars / the callback ref
+  // can read current values without re-creating themselves on every typography state change.
+  const typographyStateRef = useRef(null);
+  typographyStateRef.current = { fontSize, lineHeight, columnWidth, letterSpacing, wordSpacing, textAlign, currentFontCss };
+
+  const writeTypographyVars = useCallback(() => {
+    const el = docWrapperRef.current;
+    if (!el) return;
+    const s = typographyStateRef.current;
+    el.style.setProperty("--rf-font-size", `${s.fontSize}px`);
+    el.style.setProperty("--rf-line-height", String(s.lineHeight));
+    el.style.setProperty("--rf-column-width", `${s.columnWidth}%`);
+    el.style.setProperty("--rf-letter-spacing", `${s.letterSpacing}px`);
+    el.style.setProperty("--rf-word-spacing", `${s.wordSpacing}px`);
+    el.style.setProperty("--rf-text-align", s.textAlign || "left");
+    if (s.currentFontCss) el.style.setProperty("--rf-font-family", s.currentFontCss);
+  }, []);
+
+  // Per-slider live writers: write a single CSS var directly to the wrapper on every drag tick.
+  // App state isn't touched during drag — we update it once on release via the slider's onChange.
+  const liveWriters = useMemo(() => ({
+    fontSize: v => docWrapperRef.current?.style.setProperty("--rf-font-size", `${v}px`),
+    lineHeight: v => docWrapperRef.current?.style.setProperty("--rf-line-height", String(v)),
+    columnWidth: v => docWrapperRef.current?.style.setProperty("--rf-column-width", `${v}%`),
+    letterSpacing: v => docWrapperRef.current?.style.setProperty("--rf-letter-spacing", `${v}px`),
+    wordSpacing: v => docWrapperRef.current?.style.setProperty("--rf-word-spacing", `${v}px`),
+  }), []);
+
+  // Callback ref: writes vars synchronously the moment DocumentBody's wrapper mounts.
+  // Without this, calc(var(--rf-font-size) * 1.5) on titles and calc(var(--rf-line-height) * 1.5em)
+  // on dividers evaluate to invalid (no value, no fallback in calc) → headings collapse to body size.
+  const handleDocWrapperRef = useCallback((el) => {
+    docWrapperRef.current = el;
+    if (el) writeTypographyVars();
+  }, [writeTypographyVars]);
+
+  // Slider-driven updates: rAF-coalesced direct DOM writes, no React reconciliation in document tree.
+  useLayoutEffect(() => {
+    if (!docWrapperRef.current) return;
+    if (typographyRafRef.current) cancelAnimationFrame(typographyRafRef.current);
+    typographyRafRef.current = requestAnimationFrame(() => {
+      typographyRafRef.current = null;
+      writeTypographyVars();
+    });
+    return () => { if (typographyRafRef.current) cancelAnimationFrame(typographyRafRef.current); };
+  }, [fontSize, lineHeight, columnWidth, letterSpacing, wordSpacing, textAlign, currentFontCss, writeTypographyVars]);
+
+  // ── Render settings: only props that genuinely change paragraph/section JSX (palette colors, bold split, theme). ──
+  //     NeuroDiv/HueGuide/Focus are NOT here — they flip via featureClassRef and never trigger Section re-renders.
+  const settings = useMemo(() => ({
+    neuroDivIntensity,
+    huePalette,
+    t,
+  }), [neuroDivIntensity, huePalette, t]);
 
   // ── Handlers ──
   const scrollToSection = useCallback((idx) => {
@@ -240,7 +328,9 @@ export default function App() {
         {panelOpen && (
           <div style={{ width: 296 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "12px 12px 0px" }}>
-              <button onClick={() => setPanelOpen(false)} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 4, borderRadius: 6 }}><PanelLeftClose size={16} /></button>
+              <Tip label="Close panel" t={t} side="bottom">
+                <button onClick={() => setPanelOpen(false)} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><PanelLeftClose size={16} strokeWidth={2} /></button>
+              </Tip>
             </div>
 
             <div style={{ padding: "10px 0 2px" }}>
@@ -256,7 +346,7 @@ export default function App() {
 
             <Section title="Enhancements" icon={Sparkles} t={t} open={false}>
               <Toggle on={neuroDiv} onChange={setNeuroDiv} label="NeuroDiv Anchoring" icon={Baseline} t={t} />
-              {neuroDiv && <Slider value={neuroDivIntensity} min={0.2} max={0.7} step={0.01} onChange={setNeuroDivIntensity} label="Bold intensity" display={Math.round(neuroDivIntensity * 100) + "%"} t={t} />}
+              {neuroDiv && <Slider value={neuroDivIntensity} min={0.2} max={0.7} step={0.01} onChange={setNeuroDivIntensity} label="Bold intensity" format={FMT_PCT_FROM_FRAC} t={t} />}
               <Toggle on={hueGuide} onChange={setHueGuide} label="HueGuide Tracking" icon={Palette} t={t} />
               {hueGuide && <div style={{ padding: "6px 12px", display: "flex", flexWrap: "wrap", gap: 6 }}>{Object.entries(PALETTES).map(([k, pal]) => <button key={k} onClick={() => setHuePalette(k)} title={pal.label} style={{ width: 42, height: 26, borderRadius: 8, overflow: "hidden", display: "flex", padding: 0, cursor: "pointer", border: huePalette === k ? `2px solid ${t.accent}` : `1px solid ${t.border}`, boxShadow: huePalette === k ? `0 0 0 2px ${t.accentSoft}` : "none", transition: "all 0.15s" }}>{pal.colors.map((c, i) => <div key={i} style={{ flex: 1, background: c, height: "100%" }} />)}</button>)}</div>}
               <Toggle on={focusMode} onChange={v => { setFocusMode(v); if (!v) setFocusPara(-1); }} label="Focus Mode" icon={Focus} t={t} />
@@ -266,7 +356,7 @@ export default function App() {
               <div style={{ padding: "4px 12px" }}>
                 <Segment options={[{ value: "none", label: "Off", icon: EyeOff }, { value: "highlight", label: "Highlight", icon: Highlighter }, { value: "underline", label: "Line", icon: UnderlineIcon }, { value: "dim", label: "Dim", icon: Eye }]} value={guideMode} onChange={setGuideMode} t={t} />
               </div>
-              {guideMode === "dim" && <Slider value={guideDimOpacity} min={0.05} max={0.7} step={0.01} onChange={setGuideDimOpacity} label="Dim opacity" display={Math.round(guideDimOpacity * 100) + "%"} t={t} />}
+              {guideMode === "dim" && <Slider value={guideDimOpacity} min={0.05} max={0.7} step={0.01} onChange={setGuideDimOpacity} label="Dim opacity" format={FMT_PCT_FROM_FRAC} t={t} />}
               {(guideMode === "highlight" || guideMode === "underline") && (
                 <div style={{ padding: "10px 12px 4px" }}>
                   <span style={{ fontSize: 12, color: t.fgSoft, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", marginBottom: 8, display: "block" }}>Guide color</span>
@@ -281,11 +371,11 @@ export default function App() {
 
             <Section title="Typography" icon={Type} t={t} open={false}>
               <FontPicker value={fontFamily} onChange={setFontFamily} t={t} />
-              <Slider value={fontSize} min={12} max={36} step={1} onChange={setFontSize} label="Font size" display={fontSize + "px"} t={t} />
-              <Slider value={lineHeight} min={1.0} max={3} step={0.05} onChange={setLineHeight} label="Line height" display={lineHeight.toFixed(2)} t={t} />
-              <Slider value={letterSpacing} min={-1} max={5} step={0.1} onChange={setLetterSpacing} label="Letter spacing" display={letterSpacing.toFixed(1) + "px"} t={t} />
-              <Slider value={wordSpacing} min={0} max={12} step={0.5} onChange={setWordSpacing} label="Word spacing" display={wordSpacing.toFixed(1) + "px"} t={t} />
-              <Slider value={columnWidth} min={40} max={100} step={1} onChange={setColumnWidth} label="Column width" display={columnWidth + "%"} t={t} />
+              <Slider value={fontSize} min={12} max={36} step={1} onChange={setFontSize} onLiveChange={liveWriters.fontSize} label="Font size" format={FMT_PX} t={t} />
+              <Slider value={lineHeight} min={1.0} max={3} step={0.05} onChange={setLineHeight} onLiveChange={liveWriters.lineHeight} label="Line height" format={FMT_LH} t={t} />
+              <Slider value={letterSpacing} min={-1} max={5} step={0.1} onChange={setLetterSpacing} onLiveChange={liveWriters.letterSpacing} label="Letter spacing" format={FMT_FIXED1_PX} t={t} />
+              <Slider value={wordSpacing} min={0} max={12} step={0.5} onChange={setWordSpacing} onLiveChange={liveWriters.wordSpacing} label="Word spacing" format={FMT_FIXED1_PX} t={t} />
+              <Slider value={columnWidth} min={40} max={100} step={1} onChange={setColumnWidth} onLiveChange={liveWriters.columnWidth} label="Column width" format={FMT_PCT} t={t} />
               <div style={{ padding: "4px 12px 8px" }}>
                 <span style={{ fontSize: 12, color: t.fgSoft, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", marginBottom: 6, display: "block" }}>Text alignment</span>
                 <Segment options={[{ value: "left", label: "Left", icon: AlignLeft }, { value: "center", label: "Center", icon: AlignCenter }, { value: "right", label: "Right", icon: AlignRight }, { value: "justify", label: "Justify", icon: AlignJustify }]} value={textAlign} onChange={setTextAlign} t={t} />
@@ -315,10 +405,14 @@ export default function App() {
         {/* Top bar */}
         <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "8px 16px", borderBottom: `1px solid ${t.borderSoft}`, minHeight: 44, background: t.bg }}>
           {!panelOpen && (<>
-            <button onClick={() => setPanelOpen(true)} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 6, borderRadius: 8 }}><PanelLeft size={18} /></button>
+            <Tip label="Open panel" t={t} side="bottom">
+              <button onClick={() => setPanelOpen(true)} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><PanelLeft size={16} strokeWidth={2} /></button>
+            </Tip>
             <span style={{ fontSize: 14, fontWeight: 620, color: t.fg }}>ReadFlow</span>
           </>)}
           <div style={{ flex: 1 }} />
+
+          {sub.isPro && !sub.isTrial && <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}><Crown size={12} /> Pro</div>}
 
           {/* Chapter navigator */}
           {hasSections && docSections.length > 1 && (
@@ -357,7 +451,6 @@ export default function App() {
           )}
 
           {sub.isTrial && <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}><Clock size={12} /> Trial — {sub.trialDaysLeft}d left</div>}
-          {sub.isPro && !sub.isTrial && <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}><Crown size={12} /> Pro</div>}
 
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             {[{ on: neuroDiv, set: setNeuroDiv, icon: Baseline, tip: "NeuroDiv" }, { on: hueGuide, set: setHueGuide, icon: Palette, tip: "HueGuide" }, { on: focusMode, set: v => { setFocusMode(v); if (!v) setFocusPara(-1); }, icon: Focus, tip: "Focus" }].map(({ on, set, icon: Icon, tip }) => (
@@ -378,12 +471,9 @@ export default function App() {
           {guide.renderOverlay(showGuide)}
           <DocumentBody
             text={text} docSections={docSections} hasSections={hasSections}
-            neuroDiv={deferredNeuroDiv} neuroDivIntensity={neuroDivIntensity}
-            hueGuide={deferredHueGuide} huePalette={huePalette}
-            focusMode={deferredFocusMode} setFocusPara={setFocusPara}
-            fontSize={fontSize} lineHeight={lineHeight} columnWidth={columnWidth}
-            letterSpacing={letterSpacing} wordSpacing={wordSpacing} textAlign={textAlign}
-            currentFontCss={currentFont?.css} t={t} sectionRefs={sectionRefs}
+            wrapperRef={handleDocWrapperRef} featureClassRef={handleFeatureClassRef}
+            settings={settings} focusModeRef={focusModeRef}
+            setFocusPara={setFocusPara} sectionRefs={sectionRefs}
           />
         </div>
       </div>
