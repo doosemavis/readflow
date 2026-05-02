@@ -48,9 +48,3 @@ export function getTooltipColors(themeKey) {
     border: palette[`${cfg.key}7`],
   };
 }
-
-// Theme metadata for downstream Radix consumers (e.g. <Theme accentColor=... appearance=...>).
-export function getThemeMeta(themeKey) {
-  const map = THEME_TO_SCALE[themeKey] ?? THEME_TO_SCALE.warm;
-  return { accentColor: map.scale, appearance: map.dark ? "dark" : "light" };
-}
