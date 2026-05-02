@@ -9,6 +9,7 @@ import {
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 import { THEMES, PALETTES, GUIDE_COLORS, FONTS, DEMO_TEXT } from "./config/constants";
+import { getRevealColors } from "./config/themeColors";
 
 // Stable Slider format helpers (module-level so memo on Slider isn't busted each App render).
 const FMT_PX = v => `${v}px`;
@@ -26,6 +27,7 @@ import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructur
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
 import { useAvatar } from "./hooks/useAvatar";
+import { useThemePreference } from "./hooks/useThemePreference";
 import { useAuth } from "./contexts/AuthContext";
 import {
   Toggle, Slider, Segment, Section, FontPicker, Tip,
@@ -33,6 +35,7 @@ import {
   DocumentBody, useReadingGuide,
   PricingModal, PaywallModal, CheckoutModal,
   AuthModal, UserMenu, AdminPanel, AvatarSettingsModal,
+  DiaTextReveal,
 } from "./components";
 
 export default function App() {
@@ -70,6 +73,7 @@ export default function App() {
   // ── Auth ──
   const { user, role, loading: authLoading } = useAuth();
   const { avatar, saveAvatar } = useAvatar(user?.id);
+  const themePref = useThemePreference(user?.id);
   const [showAuth, setShowAuth] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showAvatarSettings, setShowAvatarSettings] = useState(false);
@@ -83,6 +87,30 @@ export default function App() {
       setFocusPara(-1);
     }
   }, [user, authLoading]);
+
+  // Restore the user's saved theme once per login. When the saved theme differs
+  // from the current one, run the View Transition reveal (originates from the
+  // viewport center since there's no click event) so the swap feels intentional
+  // rather than like a layout flash.
+  const restoredForUserRef = useRef(null);
+  useEffect(() => {
+    if (!user) { restoredForUserRef.current = null; return; }
+    if (themePref.savedTheme && THEMES[themePref.savedTheme] && restoredForUserRef.current !== user.id) {
+      if (themePref.savedTheme !== theme) {
+        runThemeTransition(null, () => setTheme(themePref.savedTheme));
+      }
+      restoredForUserRef.current = user.id;
+    }
+  }, [themePref.savedTheme, user, theme]);
+
+  // When persistence is on, save the active theme on every change.
+  useEffect(() => {
+    themePref.saveTheme(theme);
+  }, [theme, themePref.saveTheme]);
+
+  const onToggleThemePersist = useCallback(() => {
+    themePref.togglePersist(!themePref.persistEnabled, theme);
+  }, [themePref, theme]);
 
   // ── Subscription & modals ──
   const sub = useSubscription(role);
@@ -277,12 +305,26 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif", padding: 24 }}>
       {modals}
       <div style={{ position: "fixed", top: 14, right: 16, zIndex: 100 }}>
-        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} avatar={avatar} />
+        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
       </div>
       <div style={{ textAlign: "center", maxWidth: 520 }}>
         <div style={{ width: 68, height: 68, borderRadius: 20, background: t.accentSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><BookOpen size={32} style={{ color: t.accent }} /></div>
-        <h1 style={{ fontSize: 36, fontWeight: 740, marginBottom: 6, letterSpacing: "-0.025em" }}>ReadFlow</h1>
-        <p style={{ fontSize: 15, color: t.fgSoft, marginBottom: 12, lineHeight: 1.6, maxWidth: 400, margin: "0 auto 12px", textWrap: "balance" }}>Adaptive reading enhancement with word anchoring, color-gradient tracking, focus mode, and full typography control.</p>
+        <h1 style={{ fontSize: 36, fontWeight: 740, marginBottom: 6, letterSpacing: "-0.025em" }}>
+          <DiaTextReveal
+            text="ReadFlow"
+            colors={getRevealColors(theme)}
+            textColor={t.fg}
+            duration={2}
+          />
+        </h1>
+        <p style={{ fontSize: 15, color: t.fgSoft, marginBottom: 12, lineHeight: 1.6, maxWidth: 400, margin: "0 auto 12px", textWrap: "balance" }}>
+          <DiaTextReveal
+            text="Adaptive reading enhancement with word anchoring, color-gradient tracking, focus mode, and full typography control."
+            colors={getRevealColors(theme)}
+            textColor={t.fgSoft}
+            duration={2}
+          />
+        </p>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 32, fontSize: 12, fontWeight: 600, color: t.fgSoft }}>
           {sub.isPro ? <><Crown size={12} style={{ color: t.accent }} /><span style={{ color: t.accent }}>{sub.isTrial ? `Pro Trial — ${sub.trialDaysLeft} days left` : "Pro Plan"}</span></> : <><FileText size={12} /> {sub.uploadsUsed}/3 free docs used</>}
           {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ background: t.accentSoft, border: "none", cursor: "pointer", color: t.accent, fontSize: 11, fontWeight: 650, padding: "2px 8px", borderRadius: 6, marginLeft: 4 }}>Upgrade</button>}
@@ -506,7 +548,7 @@ export default function App() {
               </Tip>
             ))}
           </div>
-          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} avatar={avatar} />
+          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
         </div>
 
         {/* Reader scroll area */}

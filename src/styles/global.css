@@ -32,6 +32,7 @@ button:active {
 /* Inline text-link styled buttons — underline on hover */
 .rf-link:hover { text-decoration: underline; }
 
+
 /* When SmoothCursor is mounted, suppress all native cursors site-wide so the
    custom cursor is the only one visible in every interaction state. */
 html.rf-smooth-cursor-active,

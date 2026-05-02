@@ -37,14 +37,30 @@ const THEME_TO_SCALE = {
   obsidian: { scale: "violet", dark: true  },
 };
 
-// Tooltip uses step 4 (subtle hover bg) for tint, step 12 for text, step 7 for border.
-export function getTooltipColors(themeKey) {
+function resolvePalette(themeKey) {
   const map = THEME_TO_SCALE[themeKey] ?? THEME_TO_SCALE.warm;
   const cfg = SCALES[map.scale];
-  const palette = map.dark ? cfg.dark : cfg.light;
+  return { palette: map.dark ? cfg.dark : cfg.light, key: cfg.key };
+}
+
+// Tooltip uses step 4 (subtle hover bg) for tint, step 12 for text, step 7 for border.
+export function getTooltipColors(themeKey) {
+  const { palette, key } = resolvePalette(themeKey);
   return {
-    bg:     palette[`${cfg.key}4`],
-    fg:     palette[`${cfg.key}12`],
-    border: palette[`${cfg.key}7`],
+    bg:     palette[`${key}4`],
+    fg:     palette[`${key}12`],
+    border: palette[`${key}7`],
   };
+}
+
+// DiaTextReveal sweep: graduated band within the active scale (subtle → vibrant → subtle).
+export function getRevealColors(themeKey) {
+  const { palette, key } = resolvePalette(themeKey);
+  return [
+    palette[`${key}8`],
+    palette[`${key}9`],
+    palette[`${key}10`],
+    palette[`${key}9`],
+    palette[`${key}8`],
+  ];
 }

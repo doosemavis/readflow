@@ -142,7 +142,7 @@ export default function AuthModal({ onClose, t }) {
               <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required style={INPUT_STYLE(t)} />
               <div style={{ position: "relative" }}>
                 <input type={showPw ? "text" : "password"} placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required style={{ ...INPUT_STYLE(t), paddingRight: 40 }} />
-                <button type="button" onClick={() => setShowPw(v => !v)} aria-label="Toggle password visibility" style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: t.icon, padding: 2 }}>{showPw ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                <button type="button" onClick={() => setShowPw(v => !v)} aria-label="Toggle password visibility" className="rf-static" style={{ position: "absolute", right: 10, top: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer", color: t.icon, padding: "0 4px" }}>{showPw ? <EyeOff size={15} /> : <Eye size={15} />}</button>
               </div>
               <button type="submit" disabled={busy} className="rf-btn-solid" style={PRIMARY_BTN(t)}>{busy ? "Signing in…" : "Sign in"}</button>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
@@ -157,7 +157,7 @@ export default function AuthModal({ onClose, t }) {
               <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required style={INPUT_STYLE(t)} />
               <div style={{ position: "relative" }}>
                 <input type={showPw ? "text" : "password"} placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required style={{ ...INPUT_STYLE(t), paddingRight: 40 }} />
-                <button type="button" onClick={() => setShowPw(v => !v)} aria-label="Toggle password visibility" style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: t.icon, padding: 2 }}>{showPw ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                <button type="button" onClick={() => setShowPw(v => !v)} aria-label="Toggle password visibility" className="rf-static" style={{ position: "absolute", right: 10, top: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer", color: t.icon, padding: "0 4px" }}>{showPw ? <EyeOff size={15} /> : <Eye size={15} />}</button>
               </div>
               <input type={showPw ? "text" : "password"} placeholder="Confirm password" value={confirm} onChange={e => setConfirm(e.target.value)} required style={INPUT_STYLE(t)} />
               <button type="submit" disabled={busy} className="rf-btn-solid" style={PRIMARY_BTN(t)}>{busy ? "Creating account…" : "Create account"}</button>

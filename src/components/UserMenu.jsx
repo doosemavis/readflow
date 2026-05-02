@@ -1,4 +1,4 @@
-import { LogOut, Settings, ChevronDown, User, ImageIcon } from "lucide-react";
+import { LogOut, Settings, ChevronDown, User, ImageIcon, Palette } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
 import { PremadeAvatarSvg } from "./AvatarSettingsModal";
@@ -25,7 +25,7 @@ function Avatar({ avatar, initial, accent, size = 28 }) {
   );
 }
 
-export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, avatar }) {
+export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, avatar, themePersistEnabled, onToggleThemePersist }) {
   const { user, role, signOut } = useAuth();
 
   if (!user) {
@@ -76,6 +76,32 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
             style={{ padding: "10px 14px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderBottom: `1px solid ${t.borderSoft}`, outline: "none", userSelect: "none" }}
           >
             <ImageIcon size={14} style={{ color: t.icon }} /> Change avatar
+          </DropdownMenu.Item>
+
+          <DropdownMenu.Item
+            onSelect={(e) => { e.preventDefault(); onToggleThemePersist?.(); }}
+            onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            style={{ padding: "10px 14px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", borderBottom: `1px solid ${t.borderSoft}`, outline: "none", userSelect: "none" }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Palette size={14} style={{ color: t.icon }} /> Remember theme
+            </span>
+            <span style={{
+              fontSize: 10,
+              fontWeight: themePersistEnabled ? 800 : 700,
+              padding: "2px 8px",
+              borderRadius: 999,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              background: themePersistEnabled ? "#39FF14" : t.surface,
+              color: themePersistEnabled ? "#0A1A00" : t.fgSoft,
+              boxShadow: themePersistEnabled
+                ? "0 0 6px rgba(57,255,20,0.85), 0 0 14px rgba(57,255,20,0.55), 0 0 22px rgba(57,255,20,0.3), inset 0 1px 0 rgba(255,255,255,0.55)"
+                : "none",
+            }}>
+              {themePersistEnabled ? "On" : "Off"}
+            </span>
           </DropdownMenu.Item>
 
           {role === "admin" && (

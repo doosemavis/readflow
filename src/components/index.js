@@ -1,4 +1,5 @@
 export { Toggle, Slider, Segment, Section, FontPicker, Tip } from "./Primitives";
+export { DiaTextReveal } from "./DiaTextReveal";
 export { default as UploadBadge } from "./UploadBadge";
 export { SidebarRecentDocs, LandingRecentDocs } from "./RecentDocsList";
 export { default as DocumentBody } from "./DocumentBody";
