@@ -106,6 +106,7 @@ export function Tip({ label, children, t, side = "bottom", themeKey }) {
         <TooltipPrimitive.Content
           side={side}
           sideOffset={6}
+          avoidCollisions={false}
           style={{
             background: c.bg, color: c.fg,
             padding: "4px 10px", borderRadius: 6,
