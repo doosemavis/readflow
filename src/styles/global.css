@@ -32,6 +32,15 @@ button:active {
 /* Inline text-link styled buttons — underline on hover */
 .rf-link:hover { text-decoration: underline; }
 
+/* When SmoothCursor is mounted, suppress all native cursors site-wide so the
+   custom cursor is the only one visible in every interaction state. */
+html.rf-smooth-cursor-active,
+html.rf-smooth-cursor-active *,
+html.rf-smooth-cursor-active *::before,
+html.rf-smooth-cursor-active *::after {
+  cursor: none !important;
+}
+
 
 /* ── Solid CTA buttons: gradient sheen over accent color ── */
 .rf-btn-solid {

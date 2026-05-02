@@ -97,7 +97,7 @@ export const Slider = memo(function Slider({ value, min, max, step, onChange, on
   );
 });
 
-export function Tip({ label, children, t, side = "bottom", themeKey }) {
+export function Tip({ label, children, t, side = "top", themeKey }) {
   const c = getTooltipColors(themeKey ?? t.key);
   return (
     <TooltipPrimitive.Root>
