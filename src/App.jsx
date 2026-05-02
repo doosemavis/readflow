@@ -18,6 +18,13 @@ const FMT_FIXED1_PX = v => `${v.toFixed(1)}px`;
 const FMT_PCT = v => `${v}%`;
 const FMT_PCT_FROM_FRAC = v => `${Math.round(v * 100)}%`;
 
+// File-picker `accept` attribute (HTML hint) and the strict allowlist
+// doUpload validates against. Picker hint and runtime check stay in sync
+// because both derive from the same source. The `accept` attribute alone
+// can't be relied on — drag-and-drop and "show all files" both bypass it.
+const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.html,.htm,.csv,.json,.log,.rtf";
+const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, "")));
+
 // Theme picker layout: left column = light themes, right column = dark themes (5 + 5).
 // Render order is light-first-then-dark; grid-auto-flow: column with 5 rows places them
 // in two visual columns. Add new themes to the appropriate array — order within each is the row order.
@@ -29,6 +36,7 @@ import { useRecentDocs } from "./hooks/useRecentDocs";
 import { useAvatar } from "./hooks/useAvatar";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useAuth } from "./contexts/AuthContext";
+import { useToast } from "./components/Toast";
 import {
   Toggle, Slider, Segment, Section, FontPicker, Tip,
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
@@ -81,6 +89,7 @@ export default function App() {
 
   // ── Auth ──
   const { user, role, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
   const { avatar, saveAvatar } = useAvatar(user?.id);
   const themePref = useThemePreference(user?.id);
   const [showAuth, setShowAuth] = useState(false);
@@ -259,25 +268,42 @@ export default function App() {
     let sections;
     try {
       const ext = file.name.split(".").pop().toLowerCase();
+      // Guard: reject anything outside the supported allowlist. Without this,
+      // an image (.jpg/.png) or audio file falls through to the plain-text
+      // branch and `.text()` decodes its binary bytes as UTF-8 garbage —
+      // user sees a screen of gibberish instead of a clear error.
+      if (!SUPPORTED_EXTS.has(ext)) {
+        throw new Error(`ReadFlow doesn't support .${ext} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, HTML, CSV, JSON, LOG, RTF).`);
+      }
       if (ext === "pdf") { setLoadMsg("Loading PDF engine…"); sections = await parsePDF(file); }
       else if (ext === "epub") { setLoadMsg("Unpacking EPUB…"); sections = await parseEPUB(file); }
       else if (ext === "docx") { setLoadMsg("Extracting DOCX…"); sections = await parseDOCX(file); }
       else if (ext === "html" || ext === "htm") { setLoadMsg("Parsing HTML…"); sections = parseHTMLStructured(await file.text()); }
       else { sections = detectTextStructure(await file.text()); }
-      sub.recordUpload();
       const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
+      // Empty-content guard: if the parser returned no readable text, the
+      // file is most likely image-only (scanned PDF without OCR), encrypted,
+      // or genuinely empty (e.g. an audio file mis-extension'd as .txt).
+      // Fail before recording an upload or showing a blank reader.
+      if (!fullText.trim()) {
+        throw new Error("This file doesn't contain any readable text. It might be image-based, encrypted, or empty.");
+      }
+      sub.recordUpload();
       setText(fullText); setDocSections(sections); setFileName(file.name);
     } catch (e) {
-      setText("Error reading file: " + e.message); setDocSections(null); setFileName(file.name);
+      // Surface the error as a toast and leave existing reader/landing
+      // state intact — replacing `text` with an error string used to wipe
+      // out whatever the user was reading.
+      showToast(e.message, "error");
       setLoading(false); setLoadMsg("");
       return;
     }
     // Save to recents separately so a quota/storage failure leaves the
     // freshly-parsed doc visible instead of being replaced by an error message.
     try { await recentDocs.saveDoc(file.name, sections, sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n")); }
-    catch (e) { console.warn("Could not save to recent documents:", e.message); }
+    catch (e) { showToast("Couldn't save to your library: " + e.message, "error"); }
     finally { setLoading(false); setLoadMsg(""); }
-  }, [sub, recentDocs]);
+  }, [sub, recentDocs, showToast]);
 
   const loadRecentDoc = useCallback(async (entry) => {
     setLoading(true); setLoadMsg("Loading saved document…");
@@ -292,8 +318,6 @@ export default function App() {
   const onDrop = useCallback((e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer?.files?.[0]) attemptUpload(e.dataTransfer.files[0]); }, [attemptUpload]);
   const handleSelectPlan = useCallback((billing) => { setShowPricing(false); setCheckoutBilling(billing); setShowCheckout(true); }, []);
   const handleCheckoutSuccess = useCallback((billing) => { setShowCheckout(false); if (!sub.isTrial && sub.plan === "free") sub.startTrial(billing); else sub.activatePro(billing); }, [sub]);
-
-  const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.html,.htm,.csv,.json,.log,.rtf";
 
   // ── Modals ──
   // Wrapped in Suspense because each modal is React.lazy. Fallback is null
@@ -354,7 +378,7 @@ export default function App() {
           <Upload size={30} style={{ color: hoverUpload ? t.accent : t.icon, marginBottom: 14, transition: "color 0.2s ease" }} />
           <p style={{ fontSize: 15, fontWeight: 620, color: t.fg, marginBottom: 6 }}>Drop a file here or click to browse</p>
           <p style={{ fontSize: 12, color: hoverUpload ? t.accent : t.fgSoft, letterSpacing: "0.04em", transition: "color 0.2s ease" }}>PDF · EPUB · DOCX · TXT · MD · HTML</p>
-          <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => e.target.files?.[0] && attemptUpload(e.target.files[0])} />
+          <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) attemptUpload(f); }} />
         </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
           <button onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); }} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: t.surface, color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><FileText size={14} /> Try demo article</button>
@@ -505,7 +529,7 @@ export default function App() {
 
             <div style={{ padding: 14 }}>
               <button onClick={() => (sub.canUpload || devBypass) ? fileRef.current?.click() : setShowPaywall(true)} className="rf-btn" style={{ width: "100%", padding: "10px 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 560, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxSizing: "border-box" }}><Upload size={14} /> Upload new file</button>
-              <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => e.target.files?.[0] && attemptUpload(e.target.files[0])} />
+              <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) attemptUpload(f); }} />
             </div>
 
             <SidebarRecentDocs recentList={recentDocs.recentList} fileName={fileName} onLoad={loadRecentDoc} onRemove={id => recentDocs.removeDoc(id)} t={t} />

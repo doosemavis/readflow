@@ -251,6 +251,30 @@ button:active {
   100% { box-shadow: 0 0 0 var(--rf-pulse-distance, 8px) transparent; }
 }
 
+/* ── Toast (Toast.jsx) ──
+   Slide + fade for the top-anchored Radix Toast. data-state is set by
+   Radix on the toast root. Swipe-to-dismiss uses data-swipe attributes
+   that Radix sets while the user is dragging. */
+@keyframes rf-toast-slide-in {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes rf-toast-slide-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-16px); }
+}
+.rf-toast[data-state="open"]   { animation: rf-toast-slide-in 220ms cubic-bezier(0.4, 0, 0.2, 1); }
+.rf-toast[data-state="closed"] { animation: rf-toast-slide-out 180ms ease-in forwards; }
+.rf-toast[data-swipe="move"] { transform: translateY(calc(var(--radix-toast-swipe-move-y, 0) * 1px)); }
+.rf-toast[data-swipe="cancel"] { transform: translateY(0); transition: transform 180ms ease-out; }
+.rf-toast[data-swipe="end"] { animation: rf-toast-slide-out 180ms ease-in forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-toast[data-state="open"],
+  .rf-toast[data-state="closed"],
+  .rf-toast[data-swipe="end"] { animation: none; }
+}
+
 /* Sidebar collapsible sections — slide animation driven by Radix's
    --radix-collapsible-content-height var. overflow:hidden clips the
    collapsing content; popovers/tooltips inside are unaffected because
