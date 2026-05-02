@@ -48,7 +48,7 @@ export default function AdminPanel({ onClose, t }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button onClick={fetchProfiles} aria-label="Refresh users" style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: "4px 8px", borderRadius: 6 }}><RefreshCw size={14} /></button>
               <Dialog.Close asChild>
-                <button aria-label="Close" style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: "4px 8px", borderRadius: 6 }}><X size={16} /></button>
+                <button aria-label="Close" style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={16} strokeWidth={2} /></button>
               </Dialog.Close>
             </div>
           </div>

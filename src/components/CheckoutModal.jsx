@@ -65,7 +65,7 @@ export default function CheckoutModal({ billing, hasUsedTrial, onSuccess, onClos
                   </div>
                 </div>
                 <Dialog.Close asChild>
-                  <button style={{ background: t.surface, border: "none", cursor: "pointer", color: t.icon, padding: "6px 12px", borderRadius: 8 }}><X size={16} /></button>
+                  <button aria-label="Close" style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: t.surface, color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={16} strokeWidth={2} /></button>
                 </Dialog.Close>
               </div>
 

@@ -22,7 +22,7 @@ const FMT_PCT_FROM_FRAC = v => `${Math.round(v * 100)}%`;
 // in two visual columns. Add new themes to the appropriate array — order within each is the row order.
 const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
 const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
-import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure } from "./utils";
+import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure, runThemeTransition } from "./utils";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
 import { useAvatar } from "./hooks/useAvatar";
@@ -103,7 +103,7 @@ export default function App() {
   const typographyRafRef = useRef(null);
 
   // ── Derived ──
-  const t = THEMES[theme];
+  const t = useMemo(() => ({ ...THEMES[theme], key: theme }), [theme]);
   const currentFont = FONTS.find(f => f.name === fontFamily);
   const hasSections = docSections && docSections.length > 0 && (docSections.length > 1 || docSections[0]?.title);
 
@@ -300,8 +300,8 @@ export default function App() {
         <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} t={t} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 40 }}>
           {Object.entries(THEMES).map(([key, th]) => (
-            <Tip key={key} label={key[0].toUpperCase() + key.slice(1)} t={t} side="top">
-              <button onClick={() => setTheme(key)} style={{ width: 26, height: 26, borderRadius: 13, background: th.accent, cursor: "pointer", border: theme === key ? `2.5px solid ${t.fg}` : "2.5px solid transparent", boxShadow: theme === key ? `0 0 0 2.5px ${t.bg}` : "none", transition: "all 0.15s" }} />
+            <Tip key={key} label={key[0].toUpperCase() + key.slice(1)} t={t} themeKey={key} side="top">
+              <button onClick={(e) => runThemeTransition(e, () => setTheme(key))} style={{ width: 26, height: 26, borderRadius: 13, background: th.accent, cursor: "pointer", border: theme === key ? `2.5px solid ${t.fg}` : "2.5px solid transparent", boxShadow: theme === key ? `0 0 0 2.5px ${t.bg}` : "none", transition: "all 0.15s" }} />
             </Tip>
           ))}
         </div>
@@ -345,7 +345,7 @@ export default function App() {
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${t.borderSoft}`, fontSize: 12, color: t.fgSoft }}>
               <FileText size={13} /><span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileName}</span>
-              <button onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 2 }}><X size={14} /></button>
+              <button aria-label="Close document" onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); }} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={16} strokeWidth={2} /></button>
             </div>
 
             <Section title="Enhancements" icon={Sparkles} t={t} open={false}>
@@ -395,7 +395,7 @@ export default function App() {
                   return (
                     <button
                       key={key}
-                      onClick={() => setTheme(key)}
+                      onClick={(e) => runThemeTransition(e, () => setTheme(key))}
                       className="rf-btn-icon-active"
                       style={{
                         padding: "9px 14px",

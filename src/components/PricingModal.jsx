@@ -24,7 +24,7 @@ export default function PricingModal({ onClose, onSelectPlan, hasUsedTrial, t })
               <p style={{ fontSize: 14, color: t.fgSoft, margin: "6px 0 0" }}>Unlimited documents, all formats, one reader built for you.</p>
             </div>
             <Dialog.Close asChild>
-              <button style={{ background: t.surface, border: "none", cursor: "pointer", color: t.icon, padding: "8px 16px", borderRadius: 10 }}><X size={18} /></button>
+              <button aria-label="Close" style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: t.surface, color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={16} strokeWidth={2} /></button>
             </Dialog.Close>
           </div>
 

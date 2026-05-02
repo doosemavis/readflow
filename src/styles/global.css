@@ -29,6 +29,9 @@ button:active {
   filter: none !important;
 }
 
+/* Inline text-link styled buttons — underline on hover */
+.rf-link:hover { text-decoration: underline; }
+
 
 /* ── Solid CTA buttons: gradient sheen over accent color ── */
 .rf-btn-solid {
@@ -193,6 +196,17 @@ button:active {
   .rf-collapsible-content[data-state="open"],
   .rf-collapsible-content[data-state="closed"] { animation: none; }
 }
+
+/* ── Theme switch reveal (View Transitions API) ── */
+/* Disable the default cross-fade so only the JS-driven clip-path reveal plays. */
+[data-rf-theme-vt="active"]::view-transition-old(root),
+[data-rf-theme-vt="active"]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+[data-rf-theme-vt="active"]::view-transition-old(root) { z-index: 1; }
+[data-rf-theme-vt="active"]::view-transition-new(root) { z-index: 2; }
+
 
 @font-face {
   font-family: 'OpenDyslexic';

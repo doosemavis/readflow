@@ -7,6 +7,7 @@ import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { getTooltipColors } from "../config/themeColors";
 
 const DARK_BGS = new Set(["#111116", "#0B0E14", "#100E18", "#080806", "#0D1410"]);
 
@@ -96,7 +97,8 @@ export const Slider = memo(function Slider({ value, min, max, step, onChange, on
   );
 });
 
-export function Tip({ label, children, t, side = "bottom" }) {
+export function Tip({ label, children, t, side = "bottom", themeKey }) {
+  const c = getTooltipColors(themeKey ?? t.key);
   return (
     <TooltipPrimitive.Root>
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
@@ -105,7 +107,7 @@ export function Tip({ label, children, t, side = "bottom" }) {
           side={side}
           sideOffset={6}
           style={{
-            background: t.fg, color: t.bg,
+            background: c.bg, color: c.fg,
             padding: "4px 10px", borderRadius: 6,
             fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans', sans-serif",
             boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
@@ -113,7 +115,7 @@ export function Tip({ label, children, t, side = "bottom" }) {
           }}
         >
           {label}
-          <TooltipPrimitive.Arrow style={{ fill: t.fg }} />
+          <TooltipPrimitive.Arrow style={{ fill: c.bg }} />
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

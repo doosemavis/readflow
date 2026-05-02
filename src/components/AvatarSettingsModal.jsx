@@ -58,8 +58,8 @@ export default function AvatarSettingsModal({ onClose, onSave, currentAvatar, t 
           style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", background: t.bg, borderRadius: 20, maxWidth: 400, width: "calc(100% - 48px)", padding: 24, boxShadow: "0 20px 60px rgba(0,0,0,0.25)", zIndex: 1011, outline: "none" }}
         >
           <Dialog.Close asChild>
-            <button style={{ position: "absolute", top: 14, right: 14, background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: "4px 8px", borderRadius: 6 }}>
-              <X size={16} />
+            <button aria-label="Close" style={{ position: "absolute", top: 14, right: 14, width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <X size={16} strokeWidth={2} />
             </button>
           </Dialog.Close>
 

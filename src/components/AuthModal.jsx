@@ -17,8 +17,8 @@ const PRIMARY_BTN = (t) => ({
 });
 
 const LINK_STYLE = (t) => ({
-  background: "none", border: "none", color: t.accent, cursor: "pointer",
-  fontSize: 13, fontFamily: "'DM Sans', sans-serif", padding: 0,
+  color: t.accent, cursor: "pointer", textDecoration: "none",
+  fontSize: 14, fontWeight: 500, fontFamily: "'DM Sans', sans-serif",
 });
 
 const OAUTH_PROVIDERS = [
@@ -103,15 +103,16 @@ export default function AuthModal({ onClose, t }) {
           aria-describedby={undefined}
           style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", background: t.bg, borderRadius: 20, width: "calc(100% - 48px)", maxWidth: 380, padding: 28, boxShadow: "0 20px 60px rgba(0,0,0,0.25)", zIndex: 1001, outline: "none" }}
         >
-          <Dialog.Close asChild>
-            <button style={{ position: "absolute", top: 16, right: 16, background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: "4px 8px", borderRadius: 6 }}>
-              <X size={16} />
-            </button>
-          </Dialog.Close>
-
-          <Dialog.Title style={{ fontSize: 20, fontWeight: 720, color: t.fg, marginBottom: 20, fontFamily: "'DM Sans', sans-serif", margin: "0 0 20px" }}>
-            {title}
-          </Dialog.Title>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <Dialog.Title style={{ fontSize: 20, fontWeight: 720, color: t.fg, fontFamily: "'DM Sans', sans-serif", margin: 0 }}>
+              {title}
+            </Dialog.Title>
+            <Dialog.Close asChild>
+              <button aria-label="Close" style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <X size={16} strokeWidth={2} />
+              </button>
+            </Dialog.Close>
+          </div>
 
           {error && <div style={{ padding: "10px 12px", borderRadius: 8, background: "#E25C5C18", border: "1px solid #E25C5C44", color: "#E25C5C", fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 14 }}>{error}</div>}
           {info && <div style={{ padding: "10px 12px", borderRadius: 8, background: `${t.accent}18`, border: `1px solid ${t.accent}44`, color: t.accent, fontSize: 13, fontFamily: "'DM Sans', sans-serif", marginBottom: 14 }}>{info}</div>}
@@ -145,8 +146,8 @@ export default function AuthModal({ onClose, t }) {
               </div>
               <button type="submit" disabled={busy} className="rf-btn-solid" style={PRIMARY_BTN(t)}>{busy ? "Signing in…" : "Sign in"}</button>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                <button type="button" onClick={() => { setView("reset"); clear(); }} style={LINK_STYLE(t)}>Forgot password?</button>
-                <button type="button" onClick={() => { setView("signup"); clear(); }} style={LINK_STYLE(t)}>Create account</button>
+                <a href="#" className="rf-link" onClick={(e) => { e.preventDefault(); setView("reset"); clear(); }} style={LINK_STYLE(t)}>Forgot password?</a>
+                <a href="#" className="rf-link" onClick={(e) => { e.preventDefault(); setView("signup"); clear(); }} style={LINK_STYLE(t)}>Create account</a>
               </div>
             </form>
           )}
@@ -161,7 +162,7 @@ export default function AuthModal({ onClose, t }) {
               <input type={showPw ? "text" : "password"} placeholder="Confirm password" value={confirm} onChange={e => setConfirm(e.target.value)} required style={INPUT_STYLE(t)} />
               <button type="submit" disabled={busy} className="rf-btn-solid" style={PRIMARY_BTN(t)}>{busy ? "Creating account…" : "Create account"}</button>
               <div style={{ textAlign: "center", marginTop: 4 }}>
-                <button type="button" onClick={() => { setView("login"); clear(); }} style={LINK_STYLE(t)}>Already have an account? Sign in</button>
+                <a href="#" className="rf-link" onClick={(e) => { e.preventDefault(); setView("login"); clear(); }} style={LINK_STYLE(t)}>Already have an account? Sign in</a>
               </div>
             </form>
           )}
@@ -171,7 +172,7 @@ export default function AuthModal({ onClose, t }) {
               <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required style={INPUT_STYLE(t)} />
               <button type="submit" disabled={busy} className="rf-btn-solid" style={PRIMARY_BTN(t)}>{busy ? "Sending…" : "Send reset link"}</button>
               <div style={{ textAlign: "center", marginTop: 4 }}>
-                <button type="button" onClick={() => { setView("login"); clear(); }} style={LINK_STYLE(t)}>Back to sign in</button>
+                <a href="#" className="rf-link" onClick={(e) => { e.preventDefault(); setView("login"); clear(); }} style={LINK_STYLE(t)}>Back to sign in</a>
               </div>
             </form>
           )}
