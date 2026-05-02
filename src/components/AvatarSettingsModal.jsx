@@ -2,25 +2,39 @@ import { useRef } from "react";
 import { X, Upload } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { PREMADE_AVATARS, PremadeAvatarSvg } from "./PremadeAvatarSvg";
+import { useToast } from "./Toast";
 
 const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1010 };
 
-export default function AvatarSettingsModal({ onClose, onSave, currentAvatar, t }) {
+const ACCEPTED_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/gif"]);
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
+
+export default function AvatarSettingsModal({ open, onOpenChange, onSave, currentAvatar, t }) {
   const fileRef = useRef();
+  const { showToast } = useToast();
 
   const handleFile = (e) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { alert("Image must be under 2MB."); return; }
+    if (!ACCEPTED_AVATAR_TYPES.has(file.type)) {
+      showToast("Unsupported image format. Use JPG, PNG, or GIF.", "error");
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      showToast("Image must be under 2 MB.", "error");
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = (ev) => { onSave({ type: "upload", dataUrl: ev.target.result }); onClose(); };
+    reader.onload = (ev) => { onSave({ type: "upload", dataUrl: ev.target.result }); onOpenChange(false); };
+    reader.onerror = () => showToast("Couldn't read that image. Try a different file.", "error");
     reader.readAsDataURL(file);
   };
 
   const currentId = currentAvatar?.type === "premade" ? currentAvatar.id : null;
 
   return (
-    <Dialog.Root open onOpenChange={o => { if (!o) onClose(); }}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay style={OVERLAY} />
         <Dialog.Content
@@ -41,7 +55,7 @@ export default function AvatarSettingsModal({ onClose, onSave, currentAvatar, t 
             {PREMADE_AVATARS.map(({ id, bg }) => (
               <button
                 key={id}
-                onClick={() => { onSave({ type: "premade", id, bg }); onClose(); }}
+                onClick={() => { onSave({ type: "premade", id, bg }); onOpenChange(false); }}
                 style={{ padding: 0, border: currentId === id ? `3px solid ${t.accent}` : "3px solid transparent", borderRadius: 14, cursor: "pointer", background: "none", boxShadow: currentId === id ? `0 0 0 2px ${t.accentSoft}` : "none", transition: "all 0.15s" }}
                 aria-label={`Select avatar ${id}`}
               >
@@ -56,7 +70,12 @@ export default function AvatarSettingsModal({ onClose, onSave, currentAvatar, t 
           >
             <Upload size={14} /> Upload image
           </button>
-          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: "none" }} onChange={handleFile} />
+          <p style={{ fontSize: 11, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", margin: "8px 0 0", textAlign: "center", lineHeight: 1.5 }}>
+            JPG, PNG, or GIF — up to 2&nbsp;MB.
+            <br />
+            For best quality, use a square image at 200&times;200&nbsp;px or larger.
+          </p>
+          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/gif" style={{ display: "none" }} onChange={handleFile} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

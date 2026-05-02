@@ -99,12 +99,28 @@ export async function cloudSaveDoc(userId, name, sections, fullText) {
 // Fetch a previously-uploaded doc's content. Returns null if missing or
 // unparseable so callers can show a "no longer available" state instead
 // of crashing.
+//
+// Side effect: updates last_accessed_at so the TTL clock resets. Without
+// this, opening a doc you read every day would still get it deleted after
+// 7 days from upload — the cleanup_expired_docs() cron job uses
+// last_accessed_at, not the original timestamp. The update is fire-and-
+// forget; a failure to refresh the timer doesn't block the read.
 export async function cloudLoadDoc(userId, entry) {
   requireUserId(userId);
   const { data: blob, error } = await supabase.storage
     .from(BUCKET)
     .download(docPath(userId, entry.id));
   if (error || !blob) return null;
+  // Refresh the last-access timestamp; ignore errors so a transient DB
+  // hiccup doesn't break the user's read.
+  supabase
+    .from("recent_docs")
+    .update({ last_accessed_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("id", entry.id)
+    .then(({ error: upErr }) => {
+      if (upErr) console.warn("[cloudDocs] failed to refresh last_accessed_at:", upErr.message);
+    });
   try {
     const text = await blob.text();
     const d = JSON.parse(text);

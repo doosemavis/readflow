@@ -1,0 +1,129 @@
+import { useState } from "react";
+import { X, AlertTriangle } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { TRIAL_DAYS } from "../config/constants";
+import { supabase } from "../utils/supabase";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "./Toast";
+
+const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1010 };
+
+const FREE_GRACE_DAYS = 7;
+const CONFIRM_PHRASE = "DELETE";
+
+function formatDate(d) {
+  return new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+// Compute when the actual hard delete happens, based on the user's plan.
+//  - Free: NOW() + 7 days (oops-recovery window)
+//  - Trial: trial's natural end (the user gets to finish evaluating)
+//  - Pro: end of current paid period (Phase 9 will replace the placeholder
+//    with Stripe's real current_period_end via webhook-populated state)
+function effectiveDeletionDate(sub) {
+  const now = Date.now();
+  if (sub.isTrial) {
+    return now + sub.trialDaysLeft * 86400000;
+  }
+  if (sub.isPro) {
+    // Placeholder until Phase 9 wires Stripe webhooks. One billing cycle from now.
+    const days = sub.billingCycle === "annual" ? 365 : 30;
+    return now + days * 86400000;
+  }
+  return now + FREE_GRACE_DAYS * 86400000;
+}
+
+export default function DeleteAccountModal({ open, onOpenChange, sub, t }) {
+  const { user, signOut } = useAuth();
+  const { showToast } = useToast();
+  const [confirmText, setConfirmText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const effectiveDate = effectiveDeletionDate(sub);
+  const canSubmit = confirmText === CONFIRM_PHRASE && !busy;
+
+  // Tier-specific phrasing for what's about to happen.
+  const graceDescription = sub.isTrial
+    ? `Your trial continues until ${formatDate(effectiveDate)}. After that, your account and all your data will be permanently deleted.`
+    : sub.isPro
+    ? `Your Pro access continues until ${formatDate(effectiveDate)} (your current billing period). You won't be charged again. After that, your account and all your data will be permanently deleted.`
+    : `You have ${FREE_GRACE_DAYS} days to change your mind. On ${formatDate(effectiveDate)}, your account and all your data will be permanently deleted.`;
+
+  const handleDelete = async () => {
+    if (!canSubmit || !user) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          deletion_requested_at: new Date().toISOString(),
+          deletion_effective_at: new Date(effectiveDate).toISOString(),
+        })
+        .eq("id", user.id);
+      if (error) throw error;
+      // Sign the user out so they hit the reactivation flow on next visit.
+      await signOut();
+      onOpenChange(false);
+      showToast(`Account deletion scheduled for ${formatDate(effectiveDate)}. Sign in before then to cancel.`, "info", 8000);
+    } catch (e) {
+      showToast(`Couldn't schedule deletion: ${e.message}`, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(v) => { if (!v) setConfirmText(""); onOpenChange(v); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay style={OVERLAY} />
+        <Dialog.Content
+          aria-describedby={undefined}
+          style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", background: t.bg, borderRadius: 20, maxWidth: 460, width: "calc(100% - 48px)", padding: 28, boxShadow: "0 20px 60px rgba(0,0,0,0.25)", zIndex: 1011, outline: "none", fontFamily: "'DM Sans', sans-serif" }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <Dialog.Title style={{ fontSize: 20, fontWeight: 720, color: "#E25C5C", margin: 0, display: "flex", alignItems: "center", gap: 10 }}>
+              <AlertTriangle size={20} /> Delete account
+            </Dialog.Title>
+            <Dialog.Close asChild>
+              <button aria-label="Close" style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <X size={16} strokeWidth={2} />
+              </button>
+            </Dialog.Close>
+          </div>
+
+          <div style={{ padding: 14, borderRadius: 10, background: "#E25C5C12", border: "1px solid #E25C5C33", marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: t.fg, margin: 0, lineHeight: 1.55, fontWeight: 600 }}>
+              This will permanently delete your account, your saved documents, and all settings.
+            </p>
+          </div>
+
+          <p style={{ fontSize: 14, color: t.fgSoft, lineHeight: 1.55, margin: "0 0 16px" }}>
+            {graceDescription}
+          </p>
+
+          <p style={{ fontSize: 13, color: t.fgSoft, lineHeight: 1.5, margin: "0 0 8px" }}>
+            Type <strong style={{ color: t.fg, fontFamily: "monospace" }}>{CONFIRM_PHRASE}</strong> to confirm.
+          </p>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={e => setConfirmText(e.target.value)}
+            placeholder={CONFIRM_PHRASE}
+            autoComplete="off"
+            spellCheck={false}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${confirmText === CONFIRM_PHRASE ? "#E25C5C" : t.border}`, background: t.surface, color: t.fg, fontSize: 14, fontFamily: "monospace", outline: "none", boxSizing: "border-box", marginBottom: 16, transition: "border-color 0.15s" }}
+          />
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => onOpenChange(false)} disabled={busy} style={{ flex: 1, padding: "11px 20px", borderRadius: 12, border: `1px solid ${t.border}`, background: "transparent", color: t.fg, cursor: busy ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 580, fontFamily: "'DM Sans', sans-serif" }}>
+              Cancel
+            </button>
+            <button onClick={handleDelete} disabled={!canSubmit} style={{ flex: 1, padding: "11px 20px", borderRadius: 12, border: "none", background: canSubmit ? "#E25C5C" : t.border, color: canSubmit ? "#fff" : t.fgSoft, cursor: canSubmit ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 660, fontFamily: "'DM Sans', sans-serif", transition: "background 0.15s, color 0.15s" }}>
+              {busy ? "Scheduling…" : "Delete my account"}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}

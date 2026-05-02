@@ -12,6 +12,15 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState("user");
   const [loading, setLoading] = useState(true);
+  // Pending account-deletion state, mirrored from profiles table.
+  // null = active account; ISO string = scheduled deletion timestamp.
+  const [deletionRequestedAt, setDeletionRequestedAt] = useState(null);
+  const [deletionEffectiveAt, setDeletionEffectiveAt] = useState(null);
+  // True when a Supabase password-recovery flow is in progress (user clicked
+  // the email reset link). The user is technically signed in via the recovery
+  // token, but we force them through a "set new password" UI before letting
+  // them use the app normally.
+  const [isRecovering, setIsRecovering] = useState(false);
   // Guard: prevents onAuthStateChange from restoring a session after manual sign-out
   const signedOutRef = useRef(false);
 
@@ -19,19 +28,43 @@ export function AuthProvider({ children }) {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, deletion_requested_at, deletion_effective_at")
         .eq("id", userId)
         .single();
-      if (!error && data) return data.role;
+      if (!error && data) return data;
     } catch {}
-    return "user";
+    return { role: "user", deletion_requested_at: null, deletion_effective_at: null };
   }, []);
+
+  // Refetches just the deletion fields. Used after the user reactivates
+  // from the banner — clears the pending state without a full re-auth.
+  const refreshDeletionStatus = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("deletion_requested_at, deletion_effective_at")
+      .eq("id", user.id)
+      .single();
+    setDeletionRequestedAt(data?.deletion_requested_at ?? null);
+    setDeletionEffectiveAt(data?.deletion_effective_at ?? null);
+  }, [user]);
 
   useEffect(() => {
     let mounted = true;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
+
+      // Password recovery: Supabase fires this when the URL contains a
+      // recovery token (user clicked the reset email link). The session
+      // is established, but we want to force them through the password
+      // reset UI before they can use the app normally.
+      if (event === "PASSWORD_RECOVERY") {
+        setIsRecovering(true);
+        if (window.location.hash) {
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      }
 
       if (event === "SIGNED_IN" && window.location.hash.includes("access_token")) {
         window.history.replaceState(null, "", window.location.pathname);
@@ -43,15 +76,20 @@ export function AuthProvider({ children }) {
         // await here means the first handler bails on `mounted=false`
         // before setUser runs, and the second subscription doesn't re-fire
         // INITIAL_SESSION because the SDK already delivered it. Fetch the
-        // role in the background and update separately when it resolves.
+        // role + deletion status in the background and update separately.
         setUser(session.user);
         setUserScope(session.user.id);
-        fetchProfile(session.user.id).then(r => {
-          if (mounted) setRole(r);
+        fetchProfile(session.user.id).then(profile => {
+          if (!mounted) return;
+          setRole(profile.role ?? "user");
+          setDeletionRequestedAt(profile.deletion_requested_at ?? null);
+          setDeletionEffectiveAt(profile.deletion_effective_at ?? null);
         });
       } else if (!session?.user || signedOutRef.current) {
         setUser(null);
         setRole("user");
+        setDeletionRequestedAt(null);
+        setDeletionEffectiveAt(null);
         clearUserScope();
       }
 
@@ -97,15 +135,28 @@ export function AuthProvider({ children }) {
       signedOutRef.current = false;
       setUser(json.user);
       setUserScope(json.user.id);
-      fetchProfile(json.user.id).then(r => setRole(r));
+      fetchProfile(json.user.id).then(profile => {
+        setRole(profile.role ?? "user");
+        setDeletionRequestedAt(profile.deletion_requested_at ?? null);
+        setDeletionEffectiveAt(profile.deletion_effective_at ?? null);
+      });
       return { data: json, error: null };
     } catch (err) {
       return { data: null, error: { message: "Something went wrong. Please try again." } };
     }
-  }, []);
+  }, [fetchProfile]);
 
   const signUp = useCallback(async (email, password) => {
     try {
+      // Block re-signup with an email that has a pending deletion request.
+      // Otherwise users could delete their account and immediately re-signup
+      // as free, creating confusing data state during the grace period.
+      const { data: pending, error: pendingErr } = await supabase
+        .rpc("email_has_pending_deletion", { check_email: email });
+      if (!pendingErr && pending === true) {
+        return { data: null, error: { message: "This email has an account scheduled for deletion. Sign in to reactivate, or wait until the scheduled deletion date." } };
+      }
+
       const res = await fetch(`${SUPA_URL}/auth/v1/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
@@ -126,13 +177,17 @@ export function AuthProvider({ children }) {
         signedOutRef.current = false;
         setUser(json.user);
         setUserScope(json.user.id);
-        fetchProfile(json.user.id).then(r => setRole(r));
+        fetchProfile(json.user.id).then(profile => {
+          setRole(profile.role ?? "user");
+          setDeletionRequestedAt(profile.deletion_requested_at ?? null);
+          setDeletionEffectiveAt(profile.deletion_effective_at ?? null);
+        });
       }
       return { data: json, error: null };
     } catch (err) {
       return { data: null, error: { message: "Something went wrong. Please try again." } };
     }
-  }, []);
+  }, [fetchProfile]);
 
   const signOut = useCallback(() => {
     // Prevent onAuthStateChange from re-setting user from SDK's in-memory cache
@@ -142,6 +197,8 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(storageKey);
     setUser(null);
     setRole("user");
+    setDeletionRequestedAt(null);
+    setDeletionEffectiveAt(null);
     clearUserScope();
     // Fire-and-forget — best effort server-side session revocation
     supabase.auth.signOut().catch(() => {});
@@ -151,6 +208,18 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase.auth.resetPasswordForEmail(email);
     return { data, error };
   }, []);
+
+  // Called from the recovery flow's "set new password" view. The user is
+  // already signed in via the recovery token, so updateUser works without
+  // re-auth. Caller is responsible for clearing recovery state on success.
+  const updatePassword = useCallback(async (newPassword) => {
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+    return { data, error };
+  }, []);
+
+  // Caller (AuthModal after successful password reset) clears the recovery
+  // flag so the modal can dismiss and the user lands in the normal app.
+  const clearRecovery = useCallback(() => setIsRecovering(false), []);
 
   const signInWithOAuth = useCallback(async (provider) => {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -163,7 +232,7 @@ export function AuthProvider({ children }) {
   const permissions = getRolePermissions(role);
 
   return (
-    <AuthContext.Provider value={{ user, role, permissions, loading, signUp, signIn, signOut, resetPassword, signInWithOAuth }}>
+    <AuthContext.Provider value={{ user, role, permissions, loading, signUp, signIn, signOut, resetPassword, updatePassword, signInWithOAuth, deletionRequestedAt, deletionEffectiveAt, refreshDeletionStatus, isRecovering, clearRecovery }}>
       {children}
     </AuthContext.Provider>
   );

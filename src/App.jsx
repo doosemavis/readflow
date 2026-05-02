@@ -41,7 +41,7 @@ import {
   Toggle, Slider, Segment, Section, FontPicker, Tip,
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
   DocumentBody, useReadingGuide,
-  UserMenu,
+  UserMenu, PendingDeletionBanner,
   DiaTextReveal, CatLoader,
 } from "./components";
 
@@ -54,6 +54,8 @@ const CheckoutModal        = lazy(() => import("./components/CheckoutModal"));
 const AuthModal            = lazy(() => import("./components/AuthModal"));
 const AdminPanel           = lazy(() => import("./components/AdminPanel"));
 const AvatarSettingsModal  = lazy(() => import("./components/AvatarSettingsModal"));
+const SubscriptionModal    = lazy(() => import("./components/SubscriptionModal"));
+const DeleteAccountModal   = lazy(() => import("./components/DeleteAccountModal"));
 
 export default function App() {
   // ── Document state ──
@@ -88,13 +90,22 @@ export default function App() {
   const [theme, setTheme] = useState("warm");
 
   // ── Auth ──
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading, deletionEffectiveAt, refreshDeletionStatus, isRecovering, clearRecovery } = useAuth();
   const { showToast } = useToast();
   const { avatar, saveAvatar } = useAvatar(user?.id);
   const themePref = useThemePreference(user?.id);
   const [showAuth, setShowAuth] = useState(false);
+
+  // Force-open AuthModal in "set new password" mode when AuthContext detects
+  // a Supabase password-recovery session (user clicked the email reset link).
+  // The modal is non-dismissible in this mode — user must complete or sign out.
+  useEffect(() => {
+    if (isRecovering) setShowAuth(true);
+  }, [isRecovering]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showAvatarSettings, setShowAvatarSettings] = useState(false);
+  const [showSubscription, setShowSubscription] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
 
   // Reset document state on signout
   useEffect(() => {
@@ -316,7 +327,20 @@ export default function App() {
   }, [recentDocs]);
 
   const onDrop = useCallback((e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer?.files?.[0]) attemptUpload(e.dataTransfer.files[0]); }, [attemptUpload]);
-  const handleSelectPlan = useCallback((billing) => { setShowPricing(false); setCheckoutBilling(billing); setShowCheckout(true); }, []);
+  // Phase 8c — gate the checkout flow on a verified email. Supabase populates
+  // user.email_confirmed_at when the user clicks the confirmation link sent
+  // at signup. OAuth users (Google) are pre-verified by the provider, so they
+  // pass this check immediately. Email/password signups must verify first.
+  const handleSelectPlan = useCallback((billing) => {
+    if (user && !user.email_confirmed_at) {
+      showToast("Please verify your email before subscribing. Check your inbox for the verification link we sent at signup.", "error", 7000);
+      setShowPricing(false);
+      return;
+    }
+    setShowPricing(false);
+    setCheckoutBilling(billing);
+    setShowCheckout(true);
+  }, [user, showToast]);
   const handleCheckoutSuccess = useCallback((billing) => { setShowCheckout(false); if (!sub.isTrial && sub.plan === "free") sub.startTrial(billing); else sub.activatePro(billing); }, [sub]);
 
   // ── Modals ──
@@ -328,9 +352,16 @@ export default function App() {
       {showPricing && <PricingModal onClose={() => setShowPricing(false)} onSelectPlan={handleSelectPlan} hasUsedTrial={sub.isTrial || sub.plan === "pro"} t={t} />}
       {showCheckout && <CheckoutModal billing={checkoutBilling} hasUsedTrial={sub.isTrial || sub.plan === "pro"} onSuccess={handleCheckoutSuccess} onClose={() => setShowCheckout(false)} t={t} />}
       {showPaywall && <PaywallModal uploadsUsed={sub.uploadsUsed} onUpgrade={() => { setShowPaywall(false); setShowPricing(true); }} onClose={() => setShowPaywall(false)} t={t} />}
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} t={t} />}
+      {showAuth && <AuthModal onClose={() => { setShowAuth(false); clearRecovery?.(); }} t={t} initialView={isRecovering ? "setPassword" : "login"} />}
       {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} t={t} />}
-      {showAvatarSettings && <AvatarSettingsModal onClose={() => setShowAvatarSettings(false)} onSave={saveAvatar} currentAvatar={avatar} t={t} />}
+      {/* AvatarSettingsModal stays mounted so Radix Dialog can run its proper
+          open→close lifecycle. Force-unmounting via `{show && ...}` (the pattern
+          we use for the others) leaks body styles like pointer-events:none on
+          rapid open/close cycles, which froze the page after the second avatar
+          pick. Controlled `open` lets Radix clean up cleanly each cycle. */}
+      <AvatarSettingsModal open={showAvatarSettings} onOpenChange={setShowAvatarSettings} onSave={saveAvatar} currentAvatar={avatar} t={t} />
+      {showSubscription && <SubscriptionModal open={showSubscription} onOpenChange={setShowSubscription} sub={sub} onShowPricing={() => setShowPricing(true)} t={t} />}
+      {showDeleteAccount && <DeleteAccountModal open={showDeleteAccount} onOpenChange={setShowDeleteAccount} sub={sub} t={t} />}
     </Suspense>
   );
 
@@ -348,9 +379,10 @@ export default function App() {
   // ═══════════════════════════════════════════
   if (!text && !loading) return (
     <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif", padding: 24 }}>
+      {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
       {modals}
       <div style={{ position: "fixed", top: 14, right: 16, zIndex: 100 }}>
-        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
+        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
       </div>
       <div style={{ textAlign: "center", maxWidth: 520 }}>
         <div style={{ width: 68, height: 68, borderRadius: 20, background: t.accentSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><BookOpen size={32} style={{ color: t.accent }} /></div>
@@ -384,7 +416,7 @@ export default function App() {
           <button onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); }} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: t.surface, color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><FileText size={14} /> Try demo article</button>
           {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: t.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><Crown size={14} /> See Pro plans</button>}
         </div>
-        <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} t={t} />
+        <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} isPro={sub.isPro} t={t} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 40 }}>
           {Object.entries(THEMES).map(([key, th]) => (
             <Tip key={key} label={key[0].toUpperCase() + key.slice(1)} t={t} themeKey={key} side="top">
@@ -411,7 +443,9 @@ export default function App() {
   // READER VIEW
   // ═══════════════════════════════════════════
   return (
-    <div style={{ height: "100vh", overflow: "hidden", background: t.bg, color: t.fg, fontFamily: "'DM Sans', sans-serif", display: "flex" }}>
+    <div style={{ height: "100vh", overflow: "hidden", background: t.bg, color: t.fg, fontFamily: "'DM Sans', sans-serif", display: "flex", flexDirection: "column" }}>
+      {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
+      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
       {modals}
 
       {/* ── SIDEBAR ── */}
@@ -532,7 +566,7 @@ export default function App() {
               <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) attemptUpload(f); }} />
             </div>
 
-            <SidebarRecentDocs recentList={recentDocs.recentList} fileName={fileName} onLoad={loadRecentDoc} onRemove={id => recentDocs.removeDoc(id)} t={t} />
+            <SidebarRecentDocs recentList={recentDocs.recentList} fileName={fileName} onLoad={loadRecentDoc} onRemove={id => recentDocs.removeDoc(id)} isPro={sub.isPro} t={t} />
           </div>
         )}
       </div>
@@ -596,7 +630,7 @@ export default function App() {
               </Tip>
             ))}
           </div>
-          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
+          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
         </div>
 
         {/* Reader scroll area */}
@@ -613,6 +647,7 @@ export default function App() {
             setFocusPara={setFocusPara} sectionRefs={sectionRefs}
           />
         </div>
+      </div>
       </div>
     </div>
   );

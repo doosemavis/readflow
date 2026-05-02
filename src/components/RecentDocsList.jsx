@@ -12,7 +12,7 @@ function timeAgo(ts) {
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export const SidebarRecentDocs = memo(function SidebarRecentDocs({ recentList, fileName, onLoad, onRemove, t }) {
+export const SidebarRecentDocs = memo(function SidebarRecentDocs({ recentList, fileName, onLoad, onRemove, isPro, t }) {
   // Hide the currently-open doc from this list — it's already shown in the
   // "Currently Reading" section above.
   const list = recentList.filter(e => e.name !== fileName).slice(0, 5);
@@ -38,12 +38,16 @@ export const SidebarRecentDocs = memo(function SidebarRecentDocs({ recentList, f
           );
         })}
       </div>
-      <p style={{ fontSize: 10, color: t.icon, fontFamily: "'DM Sans', sans-serif", margin: "6px 0 0", textAlign: "center" }}>Reopening saved docs won't use a free upload</p>
+      <p style={{ fontSize: 10, color: t.icon, fontFamily: "'DM Sans', sans-serif", margin: "6px 0 0", textAlign: "center" }}>
+        {isPro
+          ? "Documents are removed after 7 days of inactivity"
+          : "Reopening saved docs won't use a free upload"}
+      </p>
     </div>
   );
 });
 
-export const LandingRecentDocs = memo(function LandingRecentDocs({ recentList, onLoad, t }) {
+export const LandingRecentDocs = memo(function LandingRecentDocs({ recentList, onLoad, isPro, t }) {
   if (!recentList.length) return null;
   const list = recentList.slice(0, 4);
   return (
@@ -60,13 +64,18 @@ export const LandingRecentDocs = memo(function LandingRecentDocs({ recentList, o
               <div style={{ width: 34, height: 34, borderRadius: 8, background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 750, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", flexShrink: 0 }}>{ext}</div>
               <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
                 <p style={{ fontSize: 13, fontWeight: 580, color: t.fg, fontFamily: "'DM Sans', sans-serif", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</p>
-                <p style={{ fontSize: 11, color: t.fgSoft, margin: "2px 0 0", fontFamily: "'DM Sans', sans-serif" }}>{timeAgo(e.timestamp)} · Won't use a free upload</p>
+                <p style={{ fontSize: 11, color: t.fgSoft, margin: "2px 0 0", fontFamily: "'DM Sans', sans-serif" }}>{timeAgo(e.timestamp)}{!isPro && " · Won't use a free upload"}</p>
               </div>
               <ArrowRight size={14} style={{ color: t.icon, flexShrink: 0 }} />
             </div>
           );
         })}
       </div>
+      <p style={{ fontSize: 10, color: t.icon, fontFamily: "'DM Sans', sans-serif", margin: "8px 0 0", textAlign: "center" }}>
+        {isPro
+          ? "Documents are removed after 7 days of inactivity"
+          : "Reopening saved docs won't use a free upload"}
+      </p>
     </div>
   );
 });

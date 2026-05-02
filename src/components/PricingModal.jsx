@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X, Crown, Check, Zap, Gift, ArrowRight } from "lucide-react";
-import { FREE_UPLOAD_LIMIT, TRIAL_DAYS } from "../config/constants";
+import { FREE_UPLOAD_LIMIT, TRIAL_DAYS, PRICING } from "../config/constants";
 import * as Dialog from "@radix-ui/react-dialog";
 import PulsatingButton from "./PulsatingButton";
 
@@ -50,8 +50,8 @@ export default function PricingModal({ onClose, onSelectPlan, hasUsedTrial, t })
             <div onClick={() => onSelectPlan(billing)} onMouseEnter={() => setHoverCard("pro")} onMouseLeave={() => setHoverCard(null)} style={{ flex: 1, borderRadius: 16, padding: "24px 20px", border: `2px solid ${hoverCard === "pro" ? t.accent : t.accent + "AA"}`, background: hoverCard === "pro" ? `${t.accent}18` : t.accentSoft, position: "relative", display: "flex", flexDirection: "column", cursor: "pointer", transform: hoverCard === "pro" ? "translateY(-3px)" : "translateY(0)", boxShadow: hoverCard === "pro" ? `0 8px 28px ${t.accent}25` : "none", transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)" }}>
               <div style={{ position: "absolute", top: -1, right: 20, background: t.accent, color: "#fff", fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: "0 0 8px 8px", letterSpacing: "0.05em", textTransform: "uppercase" }}>Recommended</div>
               <p style={{ fontSize: 15, fontWeight: 700, color: t.fg, margin: 0, display: "flex", alignItems: "center", gap: 6 }}><Crown size={15} style={{ color: t.accent }} /> Pro</p>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 4, margin: "12px 0 4px" }}><span style={{ fontSize: 36, fontWeight: 780, color: t.fg, letterSpacing: "-0.03em" }}>{billing === "monthly" ? "$5" : "$45"}</span><span style={{ fontSize: 14, color: t.fgSoft }}>/ {billing === "monthly" ? "month" : "year"}</span></div>
-              <div style={{ height: 20, display: "flex", alignItems: "center" }}>{billing === "annual" && <p style={{ fontSize: 12, color: t.accent, fontWeight: 600, margin: 0 }}>$3.75/mo — save $15/year</p>}</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4, margin: "12px 0 4px" }}><span style={{ fontSize: 36, fontWeight: 780, color: t.fg, letterSpacing: "-0.03em" }}>{PRICING[billing].display}</span><span style={{ fontSize: 14, color: t.fgSoft }}>/ {PRICING[billing].unit}</span></div>
+              <div style={{ height: 20, display: "flex", alignItems: "center" }}>{billing === "annual" && PRICING.annual.effectiveMonthly && <p style={{ fontSize: 12, color: t.accent, fontWeight: 600, margin: 0 }}>{PRICING.annual.effectiveMonthly} — save ${PRICING.monthly.amount * 12 - PRICING.annual.amount}/year</p>}</div>
               <div style={{ height: 8 }} />
               <div style={{ flex: 1 }}>
                 {!hasUsedTrial && <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, background: `${t.accent}18`, marginBottom: 14 }}><Gift size={14} style={{ color: t.accent }} /><span style={{ fontSize: 12, fontWeight: 600, color: t.accent }}>{TRIAL_DAYS}-day free trial included</span></div>}

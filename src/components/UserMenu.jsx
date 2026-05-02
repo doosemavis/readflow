@@ -1,4 +1,4 @@
-import { LogOut, Settings, ChevronDown, User, ImageIcon, Palette } from "lucide-react";
+import { LogOut, Settings, ChevronDown, ChevronRight, User, ImageIcon, Palette, CreditCard, Trash2 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
 import { PremadeAvatarSvg } from "./PremadeAvatarSvg";
@@ -26,7 +26,7 @@ function Avatar({ avatar, initial, accent, size = 28 }) {
   );
 }
 
-export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, avatar, themePersistEnabled, onToggleThemePersist }) {
+export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, onShowSubscription, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist }) {
   const { user, role, signOut } = useAuth();
 
   if (!user) {
@@ -45,7 +45,7 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
   const roleLabel = ROLES[role]?.label ?? "User";
 
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger asChild>
         <button className="rf-static" style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px 4px 4px", borderRadius: 8, border: `1px solid ${t.border}`, background: "transparent", cursor: "pointer", color: t.fg, outline: "none" }}>
           <Avatar avatar={avatar} initial={initial} accent={t.accent} size={28} />
@@ -70,14 +70,63 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
             </div>
           </div>
 
-          <DropdownMenu.Item
-            onSelect={onShowAvatarSettings}
-            onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
-            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-            style={{ padding: "10px 14px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderBottom: `1px solid ${t.borderSoft}`, outline: "none", userSelect: "none" }}
-          >
-            <ImageIcon size={14} style={{ color: t.icon }} /> Change avatar
-          </DropdownMenu.Item>
+          {/* Settings submenu — consolidates Change avatar, Manage subscription,
+              and (for admins) Admin panel into a single nested flyout. Each
+              child still opens its own dedicated modal (SRP preserved). */}
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger
+              onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              style={{ padding: "10px 14px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", borderBottom: `1px solid ${t.borderSoft}`, outline: "none", userSelect: "none" }}
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Settings size={14} style={{ color: t.icon }} /> Settings
+              </span>
+              <ChevronRight size={14} style={{ color: t.icon }} />
+            </DropdownMenu.SubTrigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.SubContent
+                sideOffset={4}
+                style={{ minWidth: 200, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12, padding: 4, boxShadow: "0 12px 32px rgba(0,0,0,0.15)", zIndex: 1100 }}
+              >
+                <DropdownMenu.Item
+                  onSelect={onShowAvatarSettings}
+                  onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  style={{ padding: "10px 12px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, outline: "none", userSelect: "none" }}
+                >
+                  <ImageIcon size={14} style={{ color: t.icon }} /> Change avatar
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  onSelect={onShowSubscription}
+                  onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  style={{ padding: "10px 12px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, outline: "none", userSelect: "none" }}
+                >
+                  <CreditCard size={14} style={{ color: t.icon }} /> Manage subscription
+                </DropdownMenu.Item>
+                {role === "admin" && (
+                  <DropdownMenu.Item
+                    onSelect={onShowAdmin}
+                    onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                    style={{ padding: "10px 12px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, outline: "none", userSelect: "none" }}
+                  >
+                    <User size={14} style={{ color: t.icon }} /> Admin Panel
+                  </DropdownMenu.Item>
+                )}
+                <DropdownMenu.Separator style={{ height: 1, background: t.borderSoft, margin: "4px 0" }} />
+                <DropdownMenu.Item
+                  onSelect={onShowDeleteAccount}
+                  onMouseEnter={e => e.currentTarget.style.background = "#E25C5C18"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  style={{ padding: "10px 12px", cursor: "pointer", color: "#E25C5C", fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, outline: "none", userSelect: "none" }}
+                >
+                  <Trash2 size={14} /> Delete account
+                </DropdownMenu.Item>
+              </DropdownMenu.SubContent>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Sub>
 
           <DropdownMenu.Item
             onSelect={(e) => { e.preventDefault(); onToggleThemePersist?.(); }}
@@ -108,17 +157,6 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
               }} />
             </Switch.Root>
           </DropdownMenu.Item>
-
-          {role === "admin" && (
-            <DropdownMenu.Item
-              onSelect={onShowAdmin}
-              onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-              style={{ padding: "10px 14px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderBottom: `1px solid ${t.borderSoft}`, outline: "none", userSelect: "none" }}
-            >
-              <Settings size={14} style={{ color: t.icon }} /> Admin Panel
-            </DropdownMenu.Item>
-          )}
 
           <DropdownMenu.Item
             onSelect={signOut}

@@ -50,6 +50,14 @@ export const FREE_UPLOAD_LIMIT = 3;
 export const TRIAL_DAYS = 14;
 export const MAX_RECENT_DOCS = 5;
 
+// Pro tier pricing. Single source of truth — used by PricingModal,
+// SubscriptionModal, and any future Stripe Price ID mapping in Phase 9.
+// `effectiveMonthly` is just for the marketing string ("billed annually").
+export const PRICING = {
+  monthly: { amount: 5,  period: "month", label: "$5/month",  display: "$5",  unit: "month" },
+  annual:  { amount: 45, period: "year",  label: "$45/year",  display: "$45", unit: "year",  effectiveMonthly: "$3.75/mo" },
+};
+
 export const DEMO_TEXT = `Chapter 1: The Science of Reading
 
 In an age of constant digital distraction, the ability to read deeply and attentively has become one of the most valuable skills a person can cultivate. Deep reading is not merely the act of scanning words on a page — it is an immersive cognitive experience that engages memory, imagination, and critical analysis simultaneously.
