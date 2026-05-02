@@ -23,7 +23,7 @@ No test runner or linter is currently configured.
 ### Custom Hooks
 
 - `useSubscription` — Plan tier, trial lifecycle, upload quota enforcement
-- `useRecentDocs` — Persists documents to localStorage using 3.5MB chunk splitting to handle large files
+- `useRecentDocs(authReady, userId)` — Reads/writes the recent-docs index to Supabase via `cloudDocs`. Refreshes from server after each mutation; one-time migration of pre-Supabase localStorage docs runs on first authed load.
 - `useReadingGuide` — Generates highlight/underline overlay positioning
 
 ### Document Parsing Pipeline
@@ -39,17 +39,23 @@ File upload → type-specific parser → docSections[]
 
 All parsers return `{ type, title, number, content }` section objects consumed by `DocumentBody`.
 
-### Storage Adapter Pattern
+### Storage Layer
 
-`src/utils/storage.js` wraps localStorage behind a consistent interface. This is the swap point if migrating to IndexedDB or a backend API — business logic should not call localStorage directly.
+Two-tier:
+
+- **Supabase** for documents (blob in `documents` storage bucket at path `{user_id}/{doc_id}.json`) and the recent-docs index (`recent_docs` table). Accessed via `src/utils/cloudDocs.js`. Schema lives in `supabase/migrations/`. RLS policies enforce per-user isolation on both surfaces.
+- **localStorage** (via `src/utils/storage.js`) for small per-device KV: subscription state (`useSubscription`), theme persistence (`useThemePreference`), avatar (`useAvatar`). Keys are user-scoped: `rf:u:{user_id}:KEY`.
+
+`storage.js` also provides one-time GC helpers (`storageGcOrphanChunks`, `storageGcUnscopedKeys`) used by `cloudDocs.migrateLocalToCloud` to clean up legacy chunk data and pre-scoping leftovers on first authed load.
 
 ### Key Known TODOs (from README)
 
-- Replace demo Stripe flow with real Checkout Sessions
-- Swap `storage.js` adapter for IndexedDB or backend API
-- Remove DEV bypass button before deploy
+- Replace demo Stripe flow with real Checkout Sessions (CheckoutModal currently fake-Promises a delay then calls onSuccess — no Stripe API call yet)
+- Move `useSubscription` from localStorage to Supabase (reads from `subscriptions` table populated by Stripe webhooks); pairs with the Stripe work
+- Remove DEV bypass button before deploy (`App.jsx` admin-only `setDevBypass` button)
 - Add error boundaries around parsers
-- Add `React.lazy()` for modals
+- ~~Swap `storage.js` adapter for documents~~ ✅ done — recent docs now in Supabase; small KV stays on localStorage by design
+- ~~Add `React.lazy()` for modals~~ ✅ done — six modals lazy-loaded, vendor chunks split via `vite.config.js` manualChunks
 
 ### Component Exports
 

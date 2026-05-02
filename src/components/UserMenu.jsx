@@ -1,7 +1,7 @@
 import { LogOut, Settings, ChevronDown, User, ImageIcon, Palette } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
-import { PremadeAvatarSvg } from "./AvatarSettingsModal";
+import { PremadeAvatarSvg } from "./PremadeAvatarSvg";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Switch from "@radix-ui/react-switch";
 

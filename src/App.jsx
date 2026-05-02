@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, lazy, Suspense } from "react";
 import {
   Upload, FileText, Type, Palette, Eye, Sun, Moon, BookOpen,
   ChevronDown, X, Sparkles, Baseline, Highlighter, Underline as UnderlineIcon,
@@ -33,10 +33,19 @@ import {
   Toggle, Slider, Segment, Section, FontPicker, Tip,
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
   DocumentBody, useReadingGuide,
-  PricingModal, PaywallModal, CheckoutModal,
-  AuthModal, UserMenu, AdminPanel, AvatarSettingsModal,
+  UserMenu,
   DiaTextReveal, CatLoader,
 } from "./components";
+
+// Modals are conditionally rendered and not needed at first paint, so
+// they're code-split into their own chunks. Each lazy() returns a
+// component that triggers a dynamic import the first time it renders.
+const PricingModal         = lazy(() => import("./components/PricingModal"));
+const PaywallModal         = lazy(() => import("./components/PaywallModal"));
+const CheckoutModal        = lazy(() => import("./components/CheckoutModal"));
+const AuthModal            = lazy(() => import("./components/AuthModal"));
+const AdminPanel           = lazy(() => import("./components/AdminPanel"));
+const AvatarSettingsModal  = lazy(() => import("./components/AvatarSettingsModal"));
 
 export default function App() {
   // ── Document state ──
@@ -114,7 +123,7 @@ export default function App() {
 
   // ── Subscription & modals ──
   const sub = useSubscription(role);
-  const recentDocs = useRecentDocs(!authLoading);
+  const recentDocs = useRecentDocs(!authLoading, user?.id);
   const [showPricing, setShowPricing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -287,14 +296,19 @@ export default function App() {
   const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.html,.htm,.csv,.json,.log,.rtf";
 
   // ── Modals ──
-  const modals = (<>
-    {showPricing && <PricingModal onClose={() => setShowPricing(false)} onSelectPlan={handleSelectPlan} hasUsedTrial={sub.isTrial || sub.plan === "pro"} t={t} />}
-    {showCheckout && <CheckoutModal billing={checkoutBilling} hasUsedTrial={sub.isTrial || sub.plan === "pro"} onSuccess={handleCheckoutSuccess} onClose={() => setShowCheckout(false)} t={t} />}
-    {showPaywall && <PaywallModal uploadsUsed={sub.uploadsUsed} onUpgrade={() => { setShowPaywall(false); setShowPricing(true); }} onClose={() => setShowPaywall(false)} t={t} />}
-    {showAuth && <AuthModal onClose={() => setShowAuth(false)} t={t} />}
-    {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} t={t} />}
-    {showAvatarSettings && <AvatarSettingsModal onClose={() => setShowAvatarSettings(false)} onSave={saveAvatar} currentAvatar={avatar} t={t} />}
-  </>);
+  // Wrapped in Suspense because each modal is React.lazy. Fallback is null
+  // (no spinner) so the brief chunk fetch on first open isn't visually
+  // jarring — modals already have their own enter animation that masks it.
+  const modals = (
+    <Suspense fallback={null}>
+      {showPricing && <PricingModal onClose={() => setShowPricing(false)} onSelectPlan={handleSelectPlan} hasUsedTrial={sub.isTrial || sub.plan === "pro"} t={t} />}
+      {showCheckout && <CheckoutModal billing={checkoutBilling} hasUsedTrial={sub.isTrial || sub.plan === "pro"} onSuccess={handleCheckoutSuccess} onClose={() => setShowCheckout(false)} t={t} />}
+      {showPaywall && <PaywallModal uploadsUsed={sub.uploadsUsed} onUpgrade={() => { setShowPaywall(false); setShowPricing(true); }} onClose={() => setShowPaywall(false)} t={t} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} t={t} />}
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} t={t} />}
+      {showAvatarSettings && <AvatarSettingsModal onClose={() => setShowAvatarSettings(false)} onSave={saveAvatar} currentAvatar={avatar} t={t} />}
+    </Suspense>
+  );
 
   // ═══════════════════════════════════════════
   // LOADING STATE

@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
       if (event === "SIGNED_IN" && window.location.hash.includes("access_token")) {
@@ -38,11 +38,17 @@ export function AuthProvider({ children }) {
       }
 
       if (session?.user && !signedOutRef.current) {
-        const r = await fetchProfile(session.user.id);
-        if (!mounted) return;
+        // Set the user synchronously — do NOT await before this. In React
+        // StrictMode dev, the effect mounts → unmounts → re-mounts; an
+        // await here means the first handler bails on `mounted=false`
+        // before setUser runs, and the second subscription doesn't re-fire
+        // INITIAL_SESSION because the SDK already delivered it. Fetch the
+        // role in the background and update separately when it resolves.
         setUser(session.user);
-        setRole(r);
         setUserScope(session.user.id);
+        fetchProfile(session.user.id).then(r => {
+          if (mounted) setRole(r);
+        });
       } else if (!session?.user || signedOutRef.current) {
         setUser(null);
         setRole("user");
@@ -74,9 +80,20 @@ export function AuthProvider({ children }) {
       });
       const json = await res.json();
       if (!res.ok) return { data: null, error: { message: json.error_description || json.msg || "Invalid email or password." } };
-      // Store session so supabase.auth.signOut() can revoke it
+      // Write session to localStorage in the exact shape the SDK's
+      // GoTrueClient expects on restore. Includes expires_in (was missing
+      // before) which the parser uses to compute refresh windows. Avoids
+      // calling supabase.auth.setSession() because that hits /auth/v1/user
+      // and hangs against this project's `sb_publishable_` key.
       const storageKey = `sb-${SUPA_URL.split("//")[1].split(".")[0]}-auth-token`;
-      localStorage.setItem(storageKey, JSON.stringify({ access_token: json.access_token, refresh_token: json.refresh_token, expires_at: json.expires_at, token_type: json.token_type, user: json.user }));
+      localStorage.setItem(storageKey, JSON.stringify({
+        access_token: json.access_token,
+        refresh_token: json.refresh_token,
+        expires_at: json.expires_at,
+        expires_in: json.expires_in,
+        token_type: json.token_type,
+        user: json.user,
+      }));
       signedOutRef.current = false;
       setUser(json.user);
       setUserScope(json.user.id);
@@ -98,7 +115,14 @@ export function AuthProvider({ children }) {
       if (!res.ok) return { data: null, error: { message: json.error_description || json.msg || "Signup failed.", status: res.status } };
       if (json.access_token && json.user) {
         const storageKey = `sb-${SUPA_URL.split("//")[1].split(".")[0]}-auth-token`;
-        localStorage.setItem(storageKey, JSON.stringify({ access_token: json.access_token, refresh_token: json.refresh_token, expires_at: json.expires_at, token_type: json.token_type, user: json.user }));
+        localStorage.setItem(storageKey, JSON.stringify({
+          access_token: json.access_token,
+          refresh_token: json.refresh_token,
+          expires_at: json.expires_at,
+          expires_in: json.expires_in,
+          token_type: json.token_type,
+          user: json.user,
+        }));
         signedOutRef.current = false;
         setUser(json.user);
         setUserScope(json.user.id);

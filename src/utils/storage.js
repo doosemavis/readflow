@@ -6,6 +6,20 @@ export function clearUserScope() { userPrefix = ""; }
 
 function scopedKey(key) { return `rf:${userPrefix}${key}`; }
 
+// Sweep `rf:KEY` keys (no user scope) left over from before user-scoping
+// was introduced. Pre-scoping artifact; current code always writes
+// `rf:u:UUID:KEY`. Safe to call on every load — only removes keys outside
+// the scope namespace.
+export function storageGcUnscopedKeys() {
+  const toDelete = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("rf:") && !k.startsWith("rf:u:")) toDelete.push(k);
+  }
+  for (const k of toDelete) { try { localStorage.removeItem(k); } catch {} }
+  return toDelete.length;
+}
+
 // Garbage-collect document chunks under the current scope whose ID isn't in
 // validIds. Returns the count of removed keys. This is what keeps localStorage
 // from filling up with chunks for docs no longer in the recent list — without
