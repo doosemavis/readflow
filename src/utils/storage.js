@@ -6,6 +6,27 @@ export function clearUserScope() { userPrefix = ""; }
 
 function scopedKey(key) { return `rf:${userPrefix}${key}`; }
 
+// Garbage-collect document chunks under the current scope whose ID isn't in
+// validIds. Returns the count of removed keys. This is what keeps localStorage
+// from filling up with chunks for docs no longer in the recent list — without
+// it, every save accumulates ~MB and eventually saves silently fail with
+// QuotaExceededError, which manifests as "the list won't grow".
+export function storageGcOrphanChunks(validIds) {
+  const validSet = new Set(validIds);
+  const prefix = `rf:${userPrefix}readflow-doc:`;
+  const toDelete = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(prefix)) {
+      const tail = k.substring(prefix.length);
+      const id = tail.split(":")[0];
+      if (!validSet.has(id)) toDelete.push(k);
+    }
+  }
+  for (const k of toDelete) { try { localStorage.removeItem(k); } catch {} }
+  return toDelete.length;
+}
+
 const storageAdapter = {
   async get(key) {
     try {

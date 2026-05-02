@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Crown, Check, Zap, Gift, ArrowRight } from "lucide-react";
 import { FREE_UPLOAD_LIMIT, TRIAL_DAYS } from "../config/constants";
 import * as Dialog from "@radix-ui/react-dialog";
+import PulsatingButton from "./PulsatingButton";
 
 const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1000 };
 
@@ -56,9 +57,9 @@ export default function PricingModal({ onClose, onSelectPlan, hasUsedTrial, t })
                 {!hasUsedTrial && <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, background: `${t.accent}18`, marginBottom: 14 }}><Gift size={14} style={{ color: t.accent }} /><span style={{ fontSize: 12, fontWeight: 600, color: t.accent }}>{TRIAL_DAYS}-day free trial included</span></div>}
                 {["Unlimited documents", "PDF, EPUB, DOCX & all formats", "All reading enhancements", "All themes & typography", "Priority support"].map((f, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Check size={14} style={{ color: t.accent, flexShrink: 0 }} /><span style={{ fontSize: 13, color: t.fgSoft }}>{f}</span></div>)}
               </div>
-              <button onMouseEnter={() => setHoverBtn("pro")} onMouseLeave={() => setHoverBtn(null)} onClick={e => { e.stopPropagation(); onSelectPlan(billing); }} className="rf-btn-solid" style={{ width: "100%", padding: "12px 24px", borderRadius: 12, border: "none", background: hoverBtn === "pro" ? t.fg : t.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 660, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12, boxSizing: "border-box", transition: "all 0.2s ease" }}>
+              <PulsatingButton variant="ripple" pulseColor={t.accent} duration="1.6s" distance="10px" onMouseEnter={() => setHoverBtn("pro")} onMouseLeave={() => setHoverBtn(null)} onClick={e => { e.stopPropagation(); onSelectPlan(billing); }} className="rf-btn-solid" style={{ width: "100%", padding: "12px 24px", borderRadius: 12, border: "none", background: hoverBtn === "pro" ? t.fg : t.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 660, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12, boxSizing: "border-box", transition: "all 0.2s ease" }}>
                 <Zap size={14} />{hasUsedTrial ? "Subscribe now" : `Start ${TRIAL_DAYS}-day free trial`}<ArrowRight size={14} />
-              </button>
+              </PulsatingButton>
             </div>
           </div>
 

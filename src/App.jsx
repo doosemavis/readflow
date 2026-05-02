@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } fr
 import {
   Upload, FileText, Type, Palette, Eye, Sun, Moon, BookOpen,
   ChevronDown, X, Sparkles, Baseline, Highlighter, Underline as UnderlineIcon,
-  EyeOff, MousePointer2, Focus, PanelLeftClose, PanelLeft, Loader2,
+  EyeOff, MousePointer2, Focus, PanelLeftClose, PanelLeft,
   Crown, Clock, Check, List,
   AlignLeft, AlignCenter, AlignRight, AlignJustify
 } from "lucide-react";
@@ -35,7 +35,7 @@ import {
   DocumentBody, useReadingGuide,
   PricingModal, PaywallModal, CheckoutModal,
   AuthModal, UserMenu, AdminPanel, AvatarSettingsModal,
-  DiaTextReveal,
+  DiaTextReveal, CatLoader,
 } from "./components";
 
 export default function App() {
@@ -114,7 +114,7 @@ export default function App() {
 
   // ── Subscription & modals ──
   const sub = useSubscription(role);
-  const recentDocs = useRecentDocs();
+  const recentDocs = useRecentDocs(!authLoading);
   const [showPricing, setShowPricing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -247,9 +247,9 @@ export default function App() {
 
   const doUpload = useCallback(async (file) => {
     setLoading(true); setLoadMsg("Reading file…");
+    let sections;
     try {
       const ext = file.name.split(".").pop().toLowerCase();
-      let sections;
       if (ext === "pdf") { setLoadMsg("Loading PDF engine…"); sections = await parsePDF(file); }
       else if (ext === "epub") { setLoadMsg("Unpacking EPUB…"); sections = await parseEPUB(file); }
       else if (ext === "docx") { setLoadMsg("Extracting DOCX…"); sections = await parseDOCX(file); }
@@ -258,8 +258,15 @@ export default function App() {
       sub.recordUpload();
       const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
       setText(fullText); setDocSections(sections); setFileName(file.name);
-      await recentDocs.saveDoc(file.name, sections, fullText);
-    } catch (e) { setText("Error reading file: " + e.message); setDocSections(null); setFileName(file.name); }
+    } catch (e) {
+      setText("Error reading file: " + e.message); setDocSections(null); setFileName(file.name);
+      setLoading(false); setLoadMsg("");
+      return;
+    }
+    // Save to recents separately so a quota/storage failure leaves the
+    // freshly-parsed doc visible instead of being replaced by an error message.
+    try { await recentDocs.saveDoc(file.name, sections, sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n")); }
+    catch (e) { console.warn("Could not save to recent documents:", e.message); }
     finally { setLoading(false); setLoadMsg(""); }
   }, [sub, recentDocs]);
 
@@ -294,7 +301,7 @@ export default function App() {
   // ═══════════════════════════════════════════
   if (!sub.loaded) return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
-      <div style={{ textAlign: "center" }}><BookOpen size={28} style={{ color: t.accent, marginBottom: 10 }} /><p style={{ fontSize: 14, color: t.fgSoft }}>Loading ReadFlow…</p></div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}><CatLoader size={160} style={{ marginBottom: 14 }} /><p style={{ fontSize: 14, color: t.fgSoft }}>Loading ReadFlow…</p></div>
     </div>
   );
 
@@ -354,9 +361,9 @@ export default function App() {
   // ═══════════════════════════════════════════
   // FULL-SCREEN LOADING
   // ═══════════════════════════════════════════
-  if (loading && !text) return (
+  if (loading) return (
     <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
-      <Loader2 size={36} style={{ color: t.accent, marginBottom: 16, animation: "spin 1s linear infinite" }} />
+      <CatLoader size={220} style={{ marginBottom: 20 }} />
       <p style={{ fontSize: 16, fontWeight: 620, color: t.fg, marginBottom: 4 }}>{loadMsg}</p>
       <p style={{ fontSize: 13, color: t.fgSoft }}>This may take a moment for large files</p>
     </div>
@@ -385,9 +392,12 @@ export default function App() {
               {role === "admin" && <div style={{ padding: "0 14px 4px" }}><button onClick={() => setDevBypass(!devBypass)} style={{ width: "100%", padding: "5px 10px", borderRadius: 7, border: `1px dashed ${devBypass ? "#22C55E" : "#E25C5C"}`, background: devBypass ? "#22C55E12" : "transparent", color: devBypass ? "#22C55E" : "#E25C5C", cursor: "pointer", fontSize: 10, fontWeight: 650, fontFamily: "monospace", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, boxSizing: "border-box" }}>{devBypass ? "✓ DEV: Uploads unlimited" : "⚙ DEV: Disable upload limit"}</button></div>}
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: `1px solid ${t.borderSoft}`, fontSize: 12, color: t.fgSoft }}>
-              <FileText size={13} /><span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileName}</span>
-              <button aria-label="Close document" onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); }} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={16} strokeWidth={2} /></button>
+            <div style={{ padding: "10px 14px", borderBottom: `1px solid ${t.borderSoft}` }}>
+              <p style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.06em", textTransform: "uppercase", margin: "0 0 8px", padding: "0 2px" }}>Currently Reading</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: t.fgSoft }}>
+                <FileText size={13} /><span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileName}</span>
+                <button aria-label="Close document" onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); }} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={16} strokeWidth={2} /></button>
+              </div>
             </div>
 
             <Section title="Enhancements" icon={Sparkles} t={t} open={false}>

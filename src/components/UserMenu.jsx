@@ -3,6 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
 import { PremadeAvatarSvg } from "./AvatarSettingsModal";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as Switch from "@radix-ui/react-switch";
 
 const ROLE_COLORS = {
   admin:    { bg: "#3B82F618", text: "#3B82F6" },
@@ -87,21 +88,25 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Palette size={14} style={{ color: t.icon }} /> Remember theme
             </span>
-            <span style={{
-              fontSize: 10,
-              fontWeight: themePersistEnabled ? 800 : 700,
-              padding: "2px 8px",
-              borderRadius: 999,
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
-              background: themePersistEnabled ? "#39FF14" : t.surface,
-              color: themePersistEnabled ? "#0A1A00" : t.fgSoft,
-              boxShadow: themePersistEnabled
-                ? "0 0 6px rgba(57,255,20,0.85), 0 0 14px rgba(57,255,20,0.55), 0 0 22px rgba(57,255,20,0.3), inset 0 1px 0 rgba(255,255,255,0.55)"
-                : "none",
-            }}>
-              {themePersistEnabled ? "On" : "Off"}
-            </span>
+            <Switch.Root
+              checked={!!themePersistEnabled}
+              onCheckedChange={() => onToggleThemePersist?.()}
+              onClick={e => e.stopPropagation()}
+              className="rf-static"
+              style={{
+                width: 36, height: 20, borderRadius: 10, padding: 2, flexShrink: 0,
+                background: themePersistEnabled ? (t.switchOn ?? t.accent) : t.border, border: "none", cursor: "pointer",
+                transition: "background 0.2s ease", display: "flex", alignItems: "center",
+                outline: "none",
+              }}
+            >
+              <Switch.Thumb style={{
+                display: "block", width: 16, height: 16, borderRadius: 8,
+                background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                transition: "transform 0.2s cubic-bezier(0.4,0,0.2,1)",
+                transform: themePersistEnabled ? "translateX(16px)" : "translateX(0)",
+              }} />
+            </Switch.Root>
           </DropdownMenu.Item>
 
           {role === "admin" && (

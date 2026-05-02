@@ -11,3 +11,5 @@ export { default as AuthModal } from "./AuthModal";
 export { default as UserMenu } from "./UserMenu";
 export { default as AdminPanel } from "./AdminPanel";
 export { default as AvatarSettingsModal } from "./AvatarSettingsModal";
+export { default as CatLoader } from "./CatLoader";
+export { default as PulsatingButton } from "./PulsatingButton";

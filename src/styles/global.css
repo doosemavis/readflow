@@ -33,16 +33,6 @@ button:active {
 .rf-link:hover { text-decoration: underline; }
 
 
-/* When SmoothCursor is mounted, suppress all native cursors site-wide so the
-   custom cursor is the only one visible in every interaction state. */
-html.rf-smooth-cursor-active,
-html.rf-smooth-cursor-active *,
-html.rf-smooth-cursor-active *::before,
-html.rf-smooth-cursor-active *::after {
-  cursor: none !important;
-}
-
-
 /* ── Solid CTA buttons: gradient sheen over accent color ── */
 .rf-btn-solid {
   background-image: linear-gradient(
@@ -185,6 +175,81 @@ html.rf-smooth-cursor-active *::after {
 .rf-neurodiv .rf-word strong { font-weight: 700; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Cat loader (CatLoader.jsx) ──
+   Four absolute-positioned divs each show a 50%×50% slice of a 2×2 sprite.
+   Each slice rotates around a corner anchor with staggered delays, producing
+   the "cat assembling itself" effect. --rf-cat-img is set inline by the
+   component so Vite's hashed asset URL flows through correctly. */
+.rf-cat {
+  position: relative;
+  width: var(--rf-cat-size, 220px);
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  /* Sprite was re-encoded with alpha so the cream background can drop out. */
+  pointer-events: none;
+}
+.rf-cat__head,
+.rf-cat__body,
+.rf-cat__tail {
+  position: absolute;
+  inset: 0;
+  animation: rf-cat-rotating 2.79s cubic-bezier(.65, .54, .12, .93) infinite;
+  pointer-events: none;
+}
+.rf-cat__head::before,
+.rf-cat__body::before,
+.rf-cat__tail::before {
+  content: '';
+  position: absolute;
+  width: 50%;
+  height: 50%;
+  background-image: var(--rf-cat-img);
+  background-size: 200%;
+  background-repeat: no-repeat;
+}
+.rf-cat__head::before {
+  top: 0; right: 0;
+  background-position: 100% 0%;
+  transform-origin: 0% 100%;
+  transform: rotate(90deg);
+}
+.rf-cat__tail { animation-delay: 0.2s; }
+.rf-cat__tail::before {
+  left: 0; bottom: 0;
+  background-position: 0% 100%;
+  transform-origin: 100% 0%;
+  transform: rotate(-30deg);
+}
+.rf-cat__body { animation-delay: 0.1s; }
+.rf-cat__body:nth-of-type(2) { animation-delay: 0.2s; }
+.rf-cat__body::before {
+  right: 0; bottom: 0;
+  background-position: 100% 100%;
+  transform-origin: 0% 0%;
+}
+@keyframes rf-cat-rotating {
+  from { transform: rotate(720deg); }
+  to   { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rf-cat__head,
+  .rf-cat__body,
+  .rf-cat__tail { animation: none; }
+}
+
+/* ── Pulsating button (PulsatingButton.jsx) ──
+   Two variants: "pulse" softly expands a same-color shadow each cycle;
+   "ripple" emanates rings outward and fades to transparent. Color and
+   distance are read from CSS custom properties set inline by the component. */
+@keyframes rf-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--rf-pulse-color); }
+  50%      { box-shadow: 0 0 0 var(--rf-pulse-distance, 8px) var(--rf-pulse-color); }
+}
+@keyframes rf-pulse-ripple {
+  0%   { box-shadow: 0 0 0 0 var(--rf-pulse-color); }
+  100% { box-shadow: 0 0 0 var(--rf-pulse-distance, 8px) transparent; }
+}
 
 /* Sidebar collapsible sections — slide animation driven by Radix's
    --radix-collapsible-content-height var. overflow:hidden clips the

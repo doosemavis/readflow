@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 .env.local
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json

@@ -13,25 +13,27 @@ function timeAgo(ts) {
 }
 
 export const SidebarRecentDocs = memo(function SidebarRecentDocs({ recentList, fileName, onLoad, onRemove, t }) {
-  if (!recentList.length) return null;
-  const list = recentList.slice(0, 5);
+  // Hide the currently-open doc from this list — it's already shown in the
+  // "Currently Reading" section above.
+  const list = recentList.filter(e => e.name !== fileName).slice(0, 5);
+  if (!list.length) return null;
   return (
     <div style={{ padding: "0 14px 14px" }}>
       <p style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.06em", textTransform: "uppercase", margin: "0 0 8px", padding: "0 2px" }}>Recent Documents</p>
       <div style={{ borderRadius: 10, border: `1px solid ${t.borderSoft}`, overflow: "hidden" }}>
         {list.map((e, i) => {
-          const active = fileName === e.name, ext = e.name.split(".").pop().toUpperCase();
+          const ext = e.name.split(".").pop().toUpperCase();
           return (
-            <div key={e.id} onClick={() => !active && onLoad(e)}
-              onMouseEnter={ev => !active && (ev.currentTarget.style.background = t.surfaceHover)}
-              onMouseLeave={ev => !active && (ev.currentTarget.style.background = "transparent")}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderBottom: i < list.length - 1 ? `1px solid ${t.borderSoft}` : "none", background: active ? t.accentSoft : "transparent", cursor: "pointer", transition: "background 0.15s" }}>
-              <div style={{ width: 30, height: 30, borderRadius: 7, background: active ? t.accent + "22" : t.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 750, color: active ? t.accent : t.fgSoft, fontFamily: "'DM Sans', sans-serif", flexShrink: 0 }}>{ext}</div>
+            <div key={e.id} onClick={() => onLoad(e)}
+              onMouseEnter={ev => (ev.currentTarget.style.background = t.surfaceHover)}
+              onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderBottom: i < list.length - 1 ? `1px solid ${t.borderSoft}` : "none", background: "transparent", cursor: "pointer", transition: "background 0.15s" }}>
+              <div style={{ width: 30, height: 30, borderRadius: 7, background: t.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 750, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", flexShrink: 0 }}>{ext}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 12, fontWeight: 580, color: active ? t.accent : t.fg, fontFamily: "'DM Sans', sans-serif", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</p>
-                <p style={{ fontSize: 10, color: t.fgSoft, margin: "2px 0 0", fontFamily: "'DM Sans', sans-serif" }}>{active ? "Currently reading" : timeAgo(e.timestamp)}</p>
+                <p style={{ fontSize: 12, fontWeight: 580, color: t.fg, fontFamily: "'DM Sans', sans-serif", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</p>
+                <p style={{ fontSize: 10, color: t.fgSoft, margin: "2px 0 0", fontFamily: "'DM Sans', sans-serif" }}>{timeAgo(e.timestamp)}</p>
               </div>
-              {!active && <button onClick={ev => { ev.stopPropagation(); onRemove(e.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: 2, borderRadius: 4, flexShrink: 0, opacity: 0.5 }}><X size={12} /></button>}
+              <button aria-label="Remove from recent" onClick={ev => { ev.stopPropagation(); onRemove(e.id); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, borderRadius: 8, flexShrink: 0, width: 34, height: 34, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box" }}><X size={16} strokeWidth={2} /></button>
             </div>
           );
         })}

@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
+import CatLoader from "./CatLoader";
 
 const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1000 };
 const ROLE_OPTIONS = Object.entries(ROLES).map(([value, { label }]) => ({ value, label }));
@@ -58,7 +59,7 @@ export default function AdminPanel({ onClose, t }) {
           <ScrollArea.Root style={{ flex: 1, overflow: "hidden" }}>
             <ScrollArea.Viewport style={{ height: "100%", width: "100%" }}>
               {loading ? (
-                <div style={{ padding: 40, textAlign: "center", color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}>Loading users…</div>
+                <div style={{ padding: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}><CatLoader size={140} /><span>Loading users…</span></div>
               ) : profiles.length === 0 ? (
                 <div style={{ padding: 40, textAlign: "center", color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}>No users found.</div>
               ) : profiles.map((profile, i) => {
