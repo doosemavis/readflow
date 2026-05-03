@@ -3,12 +3,13 @@ import {
   Upload, FileText, Type, Palette, Eye, Sun, Moon, BookOpen,
   ChevronDown, X, Sparkles, Baseline, Highlighter, Underline as UnderlineIcon,
   EyeOff, MousePointer2, Focus, PanelLeftClose, PanelLeft,
-  Crown, Clock, Check, List,
+  Crown, Clock, Check, List, Lock,
   AlignLeft, AlignCenter, AlignRight, AlignJustify
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 import { THEMES, PALETTES, GUIDE_COLORS, FONTS, DEMO_TEXT } from "./config/constants";
+import { isThemeFree, isPaletteFree, isGuideColorFree } from "./config/proFeatures";
 import { getRevealColors } from "./config/themeColors";
 
 // Stable Slider format helpers (module-level so memo on Slider isn't busted each App render).
@@ -272,8 +273,17 @@ export default function App() {
     if (!file) return;
     if (!user) { setShowAuth(true); return; }
     if (!sub.canUpload && !devBypass) { setShowPaywall(true); return; }
+    // Pre-check file size against the server-derived per-tier ceiling.
+    // The storage trigger enforces this too; this is the friendly UX gate
+    // so the user doesn't watch a parse spinner before getting rejected.
+    if (file.size > sub.maxFileSize) {
+      const limitMb = Math.round(sub.maxFileSize / 1048576);
+      const proHint = sub.isPro ? "" : " — upgrade to Pro for 50MB.";
+      showToast(`This file is too large (${(file.size / 1048576).toFixed(1)}MB). Max ${limitMb}MB${proHint}`, "error", 7000);
+      return;
+    }
     doUpload(file);
-  }, [user, sub.canUpload, devBypass]);
+  }, [user, sub.canUpload, sub.maxFileSize, sub.isPro, devBypass, showToast]);
 
   const doUpload = useCallback(async (file) => {
     setLoading(true); setLoadMsg("Reading file…");
@@ -300,7 +310,6 @@ export default function App() {
       if (!fullText.trim()) {
         throw new Error("This file doesn't contain any readable text. It might be image-based, encrypted, or empty.");
       }
-      sub.recordUpload();
       setText(fullText); setDocSections(sections); setFileName(file.name);
     } catch (e) {
       // Surface the error as a toast and leave existing reader/landing
@@ -312,10 +321,30 @@ export default function App() {
     }
     // Save to recents separately so a quota/storage failure leaves the
     // freshly-parsed doc visible instead of being replaced by an error message.
-    try { await recentDocs.saveDoc(file.name, sections, sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n")); }
-    catch (e) { showToast("Couldn't save to your library: " + e.message, "error"); }
+    // recordUpload only fires after successful storage save so a Free user's
+    // monthly quota isn't burned by a storage outage.
+    try {
+      await recentDocs.saveDoc(file.name, sections, sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n"));
+      await sub.recordUpload();
+    }
+    catch (e) {
+      const msg = String(e?.message || e);
+      if (msg.includes("File too large")) {
+        showToast(msg, "error", 7000);
+      } else {
+        showToast("Couldn't save to your library: " + msg, "error");
+      }
+    }
     finally { setLoading(false); setLoadMsg(""); }
   }, [sub, recentDocs, showToast]);
+
+  // Cosmetic-gate helper: for Pro-only themes/palettes/guide-colors, free
+  // users get the PricingModal instead of the change being applied.
+  // adminBypass + Pro pass through.
+  const gateCosmetic = useCallback((isFreeItem, applyFn) => {
+    if (sub.isPro || isFreeItem) { applyFn(); return; }
+    setShowPricing(true);
+  }, [sub.isPro]);
 
   const loadRecentDoc = useCallback(async (entry) => {
     setLoading(true); setLoadMsg("Loading saved document…");
@@ -401,7 +430,7 @@ export default function App() {
           we use for the others) leaks body styles like pointer-events:none on
           rapid open/close cycles, which froze the page after the second avatar
           pick. Controlled `open` lets Radix clean up cleanly each cycle. */}
-      <AvatarSettingsModal open={showAvatarSettings} onOpenChange={setShowAvatarSettings} onSave={saveAvatar} currentAvatar={avatar} t={t} />
+      <AvatarSettingsModal open={showAvatarSettings} onOpenChange={setShowAvatarSettings} onSave={saveAvatar} currentAvatar={avatar} isPro={sub.isPro} onShowPricing={() => setShowPricing(true)} t={t} />
       {showSubscription && <SubscriptionModal open={showSubscription} onOpenChange={setShowSubscription} sub={sub} onShowPricing={() => setShowPricing(true)} t={t} />}
       {showDeleteAccount && <DeleteAccountModal open={showDeleteAccount} onOpenChange={setShowDeleteAccount} sub={sub} t={t} />}
     </Suspense>
@@ -460,11 +489,21 @@ export default function App() {
         </div>
         <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} isPro={sub.isPro} t={t} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 40 }}>
-          {Object.entries(THEMES).map(([key, th]) => (
-            <Tip key={key} label={key[0].toUpperCase() + key.slice(1)} t={t} themeKey={key} side="top">
-              <button onClick={(e) => runThemeTransition(e, () => setTheme(key))} style={{ width: 26, height: 26, borderRadius: 13, background: th.accent, cursor: "pointer", border: theme === key ? `2.5px solid ${t.fg}` : "2.5px solid transparent", boxShadow: theme === key ? `0 0 0 2.5px ${t.bg}` : "none", transition: "all 0.15s" }} />
-            </Tip>
-          ))}
+          {Object.entries(THEMES).map(([key, th]) => {
+            const free = isThemeFree(key);
+            const locked = !sub.isPro && !free;
+            const label = `${key[0].toUpperCase()}${key.slice(1)}${locked ? " (Pro)" : ""}`;
+            return (
+              <Tip key={key} label={label} t={t} themeKey={key} side="top">
+                <button
+                  onClick={(e) => gateCosmetic(free, () => runThemeTransition(e, () => setTheme(key)))}
+                  style={{ position: "relative", width: 26, height: 26, borderRadius: 13, background: th.accent, cursor: "pointer", border: theme === key ? `2.5px solid ${t.fg}` : "2.5px solid transparent", boxShadow: theme === key ? `0 0 0 2.5px ${t.bg}` : "none", transition: "all 0.15s", opacity: locked ? 0.55 : 1, display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  {locked && <Lock size={10} style={{ color: "#fff", filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.5))" }} />}
+                </button>
+              </Tip>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -518,7 +557,21 @@ export default function App() {
               <Toggle on={neuroDiv} onChange={setNeuroDiv} label="NeuroDiv Anchoring" icon={Baseline} t={t} />
               {neuroDiv && <Slider value={neuroDivIntensity} min={0.2} max={0.7} step={0.01} onChange={setNeuroDivIntensity} label="Bold intensity" format={FMT_PCT_FROM_FRAC} t={t} />}
               <Toggle on={hueGuide} onChange={setHueGuide} label="HueGuide Tracking" icon={Palette} t={t} />
-              {hueGuide && <div style={{ padding: "6px 12px", display: "flex", flexWrap: "wrap", gap: 6 }}>{Object.entries(PALETTES).map(([k, pal]) => <button key={k} onClick={() => setHuePalette(k)} title={pal.label} style={{ width: 42, height: 26, borderRadius: 8, overflow: "hidden", display: "flex", padding: 0, cursor: "pointer", border: huePalette === k ? `2px solid ${t.accent}` : `1px solid ${t.border}`, boxShadow: huePalette === k ? `0 0 0 2px ${t.accentSoft}` : "none", transition: "all 0.15s" }}>{pal.colors.map((c, i) => <div key={i} style={{ flex: 1, background: c, height: "100%" }} />)}</button>)}</div>}
+              {hueGuide && <div style={{ padding: "6px 12px", display: "flex", flexWrap: "wrap", gap: 6 }}>{Object.entries(PALETTES).map(([k, pal]) => {
+                const free = isPaletteFree(k);
+                const locked = !sub.isPro && !free;
+                return (
+                  <button
+                    key={k}
+                    onClick={() => gateCosmetic(free, () => setHuePalette(k))}
+                    title={`${pal.label}${locked ? " (Pro)" : ""}`}
+                    style={{ position: "relative", width: 42, height: 26, borderRadius: 8, overflow: "hidden", display: "flex", padding: 0, cursor: "pointer", border: huePalette === k ? `2px solid ${t.accent}` : `1px solid ${t.border}`, boxShadow: huePalette === k ? `0 0 0 2px ${t.accentSoft}` : "none", transition: "all 0.15s", opacity: locked ? 0.55 : 1 }}
+                  >
+                    {pal.colors.map((c, i) => <div key={i} style={{ flex: 1, background: c, height: "100%" }} />)}
+                    {locked && <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Lock size={11} style={{ color: "#fff", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} /></span>}
+                  </button>
+                );
+              })}</div>}
               <Toggle on={focusMode} onChange={v => { setFocusMode(v); if (!v) setFocusPara(-1); }} label="Focus Mode" icon={Focus} t={t} />
             </Section>
 
@@ -531,9 +584,24 @@ export default function App() {
                 <div style={{ padding: "10px 12px 4px" }}>
                   <span style={{ fontSize: 12, color: t.fgSoft, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", marginBottom: 8, display: "block" }}>Guide color</span>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {Object.entries(GUIDE_COLORS).map(([k, gc]) => { const active = guideColor === k; const dot = gc.dot || t.accent; return (
-                      <button key={k} onClick={() => setGuideColor(k)} title={gc.label} style={{ width: 28, height: 28, borderRadius: 8, cursor: "pointer", border: active ? `2px solid ${dot}` : `1.5px solid ${t.border}`, background: k === "accent" ? `conic-gradient(from 0deg, ${t.accent}, ${t.accent}88, ${t.accent})` : (gc.highlight || dot), boxShadow: active ? `0 0 0 2px ${dot}33` : "none", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center" }}>{active && <Check size={12} style={{ color: k === "accent" || k === "yellow" || k === "orange" ? "#333" : "#fff" }} />}</button>
-                    ); })}
+                    {Object.entries(GUIDE_COLORS).map(([k, gc]) => {
+                      const active = guideColor === k;
+                      const dot = gc.dot || t.accent;
+                      const free = isGuideColorFree(k);
+                      const locked = !sub.isPro && !free;
+                      return (
+                        <button
+                          key={k}
+                          onClick={() => gateCosmetic(free, () => setGuideColor(k))}
+                          title={`${gc.label}${locked ? " (Pro)" : ""}`}
+                          style={{ width: 28, height: 28, borderRadius: 8, cursor: "pointer", border: active ? `2px solid ${dot}` : `1.5px solid ${t.border}`, background: k === "accent" ? `conic-gradient(from 0deg, ${t.accent}, ${t.accent}88, ${t.accent})` : (gc.highlight || dot), boxShadow: active ? `0 0 0 2px ${dot}33` : "none", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center", opacity: locked ? 0.55 : 1 }}
+                        >
+                          {locked
+                            ? <Lock size={11} style={{ color: "#fff", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} />
+                            : (active && <Check size={12} style={{ color: k === "accent" || k === "yellow" || k === "orange" ? "#333" : "#fff" }} />)}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -558,10 +626,12 @@ export default function App() {
                   const th = THEMES[key];
                   const isActive = theme === key;
                   const isDark = DARK_THEME_KEYS.includes(key);
+                  const free = isThemeFree(key);
+                  const locked = !sub.isPro && !free;
                   return (
                     <button
                       key={key}
-                      onClick={(e) => runThemeTransition(e, () => setTheme(key))}
+                      onClick={(e) => gateCosmetic(free, () => runThemeTransition(e, () => setTheme(key)))}
                       className="rf-btn-icon-active"
                       style={{
                         padding: "9px 14px",
@@ -583,9 +653,13 @@ export default function App() {
                         boxSizing: "border-box",
                         outline: "none",
                         transition: "transform 0.15s, box-shadow 0.15s, filter 0.15s, border-color 0.15s",
+                        opacity: locked ? 0.55 : 1,
                       }}
                     >
-                      <span style={{ fontSize: 12, fontWeight: 600, color: th.fg, textTransform: "capitalize", letterSpacing: "0.02em", textAlign: "left" }}>{key}</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: th.fg, textTransform: "capitalize", letterSpacing: "0.02em", textAlign: "left" }}>
+                        {locked && <Lock size={11} style={{ color: th.fg }} />}
+                        {key}
+                      </span>
                       <span style={{
                         width: 18,
                         height: 18,
@@ -625,7 +699,13 @@ export default function App() {
           </>)}
           <div style={{ flex: 1 }} />
 
-          {sub.isPro && !sub.isTrial && <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}><Crown size={12} /> Pro</div>}
+          {sub.isPro && (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}>
+              {sub.isTrial
+                ? <><Clock size={12} /> Trial — {sub.trialDaysLeft}d left</>
+                : <><Crown size={12} /> Pro</>}
+            </div>
+          )}
 
           {/* Chapter navigator */}
           {hasSections && docSections.length > 1 && (
@@ -662,8 +742,6 @@ export default function App() {
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
           )}
-
-          {sub.isTrial && <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, background: t.accentSoft, fontSize: 11, fontWeight: 620, color: t.accent, fontFamily: "'DM Sans', sans-serif" }}><Clock size={12} /> Trial — {sub.trialDaysLeft}d left</div>}
 
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             {[{ on: neuroDiv, set: setNeuroDiv, icon: Baseline, tip: "NeuroDiv" }, { on: hueGuide, set: setHueGuide, icon: Palette, tip: "HueGuide" }, { on: focusMode, set: v => { setFocusMode(v); if (!v) setFocusPara(-1); }, icon: Focus, tip: "Focus" }].map(({ on, set, icon: Icon, tip }) => (

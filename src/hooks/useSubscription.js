@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { FREE_UPLOAD_LIMIT } from "../config/constants";
 import { getRolePermissions } from "../config/roles";
-import { storageGet, storageSet } from "../utils/storage";
 import { supabase } from "../utils/supabase";
 
 // Plan/status come from the public.subscriptions table, populated by the
@@ -9,36 +8,41 @@ import { supabase } from "../utils/supabase";
 // state changes happen via Stripe (Checkout starts a sub, cancel-subscription
 // edge function ends one) and propagate back through the webhook + realtime.
 //
-// Upload counter (uploadsUsed) still lives in localStorage; it's a
-// per-device free-tier nudge, not a billing-grade quota. Server-side upload
-// gating comes in task 9a-10.
+// Upload counter is server-authoritative now (profiles.uploads_this_month,
+// reset monthly). Client mirrors the server value via check_upload_allowed
+// RPC; record_upload increments after successful upload.
 export function useSubscription(role, user) {
   const [subRow, setSubRow] = useState(null);
   const [subLoaded, setSubLoaded] = useState(false);
 
   const [uploadsUsed, setUploadsUsed] = useState(0);
+  const [uploadLimit, setUploadLimit] = useState(FREE_UPLOAD_LIMIT);
+  const [maxFileSize, setMaxFileSize] = useState(26214400); // 25 MB default
   const [uploadsLoaded, setUploadsLoaded] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const val = await storageGet("readflow-uploads");
-      if (val) {
-        try {
-          const d = JSON.parse(val);
-          if (d.month === new Date().getMonth()) setUploadsUsed(d.count);
-        } catch {}
-      }
+  // Refetches upload allowance from the server. Single source of truth —
+  // server resets the monthly counter at the calendar boundary, so we don't
+  // do month math on the client.
+  const refetchUploadAllowance = useCallback(async () => {
+    if (!user?.id) {
+      setUploadsUsed(0);
+      setUploadLimit(FREE_UPLOAD_LIMIT);
       setUploadsLoaded(true);
-    })();
-  }, []);
+      return;
+    }
+    const { data, error } = await supabase.rpc("check_upload_allowed");
+    if (error) {
+      console.warn("check_upload_allowed failed:", error.message);
+      setUploadsLoaded(true);
+      return;
+    }
+    setUploadsUsed(data?.used ?? 0);
+    setUploadLimit(data?.limit ?? FREE_UPLOAD_LIMIT);
+    setMaxFileSize(data?.max_file_size_bytes ?? 26214400);
+    setUploadsLoaded(true);
+  }, [user?.id]);
 
-  useEffect(() => {
-    if (!uploadsLoaded) return;
-    storageSet("readflow-uploads", JSON.stringify({
-      month: new Date().getMonth(),
-      count: uploadsUsed,
-    }));
-  }, [uploadsUsed, uploadsLoaded]);
+  useEffect(() => { refetchUploadAllowance(); }, [refetchUploadAllowance]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -75,6 +79,8 @@ export function useSubscription(role, user) {
         (payload) => {
           if (payload.eventType === "DELETE") setSubRow(null);
           else setSubRow(payload.new);
+          // Tier change → server limit changes too. Refresh the cache.
+          refetchUploadAllowance();
         },
       )
       .subscribe();
@@ -111,18 +117,27 @@ export function useSubscription(role, user) {
     ? Math.max(0, Math.ceil((new Date(subRow.trial_end).getTime() - Date.now()) / 86400000))
     : 0;
 
-  const effectiveLimit = adminBypass
-    ? Infinity
-    : isPro
-      ? Infinity
-      : (permissions.uploadLimit ?? FREE_UPLOAD_LIMIT);
+  // Server-derived limit (uploadLimit) wins over the role-based override.
+  // adminBypass still short-circuits to Infinity for our owner account.
+  const effectiveLimit = adminBypass ? Infinity : uploadLimit;
   const canUpload = uploadsUsed < effectiveLimit;
 
   const loaded = subLoaded && uploadsLoaded;
 
-  const recordUpload = useCallback(() => {
-    if (!isPro) setUploadsUsed(p => p + 1);
-  }, [isPro]);
+  // Increments the server counter via RPC, then mirrors the change locally.
+  // Callers should already have checked canUpload before invoking; this is
+  // the post-success bookkeeping. Optimistic local bump if RPC succeeds.
+  const recordUpload = useCallback(async () => {
+    if (isPro) return;  // Pro is unlimited; nothing to track.
+    const { error } = await supabase.rpc("record_upload");
+    if (error) {
+      console.warn("record_upload failed:", error.message);
+      // Refetch to get the truth — local count would be stale.
+      await refetchUploadAllowance();
+      return;
+    }
+    setUploadsUsed(p => p + 1);
+  }, [isPro, refetchUploadAllowance]);
 
   // Routes through the cancel-subscription edge function. Stripe handles the
   // immediate-vs-end-of-period decision based on current status; webhook then
@@ -156,9 +171,12 @@ export function useSubscription(role, user) {
     billingCycle,
     hasStripeHistory,
     uploadsUsed,
+    uploadLimit,
+    maxFileSize,
     canUpload,
     loaded,
     recordUpload,
+    refetchUploadAllowance,
     cancelSubscription,
     // Alias retained because SubscriptionModal currently calls cancelTrial()
     // for both trial and Pro cancellations. Edge function branches internally.

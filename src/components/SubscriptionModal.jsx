@@ -140,9 +140,27 @@ export default function SubscriptionModal({ open, onOpenChange, sub, onShowPrici
                 </div>
               </div>
               {!confirmingCancel ? (
-                <button onClick={() => setConfirmingCancel(true)} style={{ width: "100%", padding: "11px 20px", borderRadius: 12, border: `1px solid ${t.border}`, background: "transparent", color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 580, fontFamily: "'DM Sans', sans-serif" }}>
-                  Cancel trial
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {isMonthly && (
+                    <Tip label="25% off!" t={t} side="top">
+                      <PulsatingButton
+                        variant="ripple"
+                        pulseColor={t.accent}
+                        duration="1.6s"
+                        distance="10px"
+                        onClick={handleUpgradeToAnnual}
+                        disabled={busy}
+                        className="rf-btn-solid"
+                        style={{ flex: 1, minWidth: 0, padding: "11px 16px", borderRadius: 12, border: "none", background: t.accent, color: "#fff", cursor: busy ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 660, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: busy ? 0.7 : 1 }}
+                      >
+                        <TrendingUp size={14} /> {busy ? "Switching…" : "Upgrade to Annual"}
+                      </PulsatingButton>
+                    </Tip>
+                  )}
+                  <button onClick={() => setConfirmingCancel(true)} style={{ flex: 1, minWidth: 0, padding: "11px 16px", borderRadius: 12, border: `1px solid ${t.border}`, background: "transparent", color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 580, fontFamily: "'DM Sans', sans-serif" }}>
+                    Cancel trial
+                  </button>
+                </div>
               ) : (
                 <div style={{ padding: 14, borderRadius: 12, background: "#E25C5C12", border: "1px solid #E25C5C33", marginBottom: 0 }}>
                   <p style={{ fontSize: 13, color: t.fg, margin: "0 0 12px", lineHeight: 1.5 }}>
@@ -162,13 +180,30 @@ export default function SubscriptionModal({ open, onOpenChange, sub, onShowPrici
             <>
               <div style={{ padding: 16, borderRadius: 12, background: `${t.accent}14`, border: `1px solid ${t.accent}33`, marginBottom: 16 }}>
                 <p style={{ fontSize: 13, color: t.accent, margin: "0 0 6px", fontWeight: 600 }}>Current plan</p>
-                <p style={{ fontSize: 18, fontWeight: 700, color: t.fg, margin: "0 0 10px" }}>Pro · {sub.billingCycle === "annual" ? "Annual" : "Monthly"} · {cyclePricing.label}</p>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: t.fgSoft, marginBottom: 4 }}>
-                  <CreditCard size={13} style={{ color: t.icon }} />
-                  Next billing: {cyclePricing.display} on {formatDate(proPeriodEnd)}
-                </div>
+                <p style={{ fontSize: 18, fontWeight: 700, color: t.fg, margin: "0 0 10px" }}>
+                  {sub.hasStripeHistory
+                    ? `Pro · ${sub.billingCycle === "annual" ? "Annual" : "Monthly"} · ${cyclePricing.label}`
+                    : "Pro (admin bypass)"}
+                </p>
+                {sub.hasStripeHistory && proPeriodEnd && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: t.fgSoft, marginBottom: 4 }}>
+                    <CreditCard size={13} style={{ color: t.icon }} />
+                    Next billing: {cyclePricing.display} on {formatDate(proPeriodEnd)}
+                  </div>
+                )}
               </div>
-              {!confirmingCancel ? (
+              {!sub.hasStripeHistory ? (
+                <div style={{ padding: 14, borderRadius: 12, background: t.surface, fontSize: 13, color: t.fgSoft, lineHeight: 1.55 }}>
+                  Admin bypass is active — there's no real Stripe subscription to manage.{" "}
+                  <a
+                    href="#start-test-subscription"
+                    onClick={(e) => { e.preventDefault(); onOpenChange(false); onShowPricing(); }}
+                    style={{ color: t.accent, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", textDecoration: "underline", cursor: "pointer" }}
+                  >
+                    Start a test subscription
+                  </a>{" "}to try the upgrade & cancel flows.
+                </div>
+              ) : !confirmingCancel ? (
                 <div style={{ display: "flex", gap: 8 }}>
                   {isMonthly && (
                     <Tip label="25% off!" t={t} side="top">
