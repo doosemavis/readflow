@@ -71,19 +71,24 @@ function StrengthMeter({ password, t }) {
 }
 
 function MatchBadge({ password, confirm }) {
-  // Only renders when both fields are non-empty AND match — pure success
-  // signal per design. Mismatch stays silent (caught on submit).
-  if (!password || !confirm || password !== confirm) return null;
+  // Live match indicator — red while passwords differ, green when they
+  // line up. Hidden until the user has typed in confirm so we don't nag
+  // before they've had a chance.
+  if (!confirm) return null;
+  const matches = password === confirm && password.length > 0;
+  const color = matches ? "#10B981" : "#E25C5C";
+  const bg    = matches ? "#10B98118" : "#E25C5C18";
+  const border = matches ? "#10B98144" : "#E25C5C44";
   return (
     <div style={{
       display: "inline-flex", alignItems: "center", gap: 6,
       padding: "4px 10px", borderRadius: 999,
-      background: "#10B98118", color: "#10B981",
-      border: "1px solid #10B98144",
+      background: bg, color, border: `1px solid ${border}`,
       fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans', sans-serif",
       marginTop: -4, alignSelf: "flex-start",
     }}>
-      <span aria-hidden="true">✓</span> Passwords match
+      <span aria-hidden="true">{matches ? "✓" : "✗"}</span>
+      {matches ? "Passwords match" : "Passwords do not match"}
     </div>
   );
 }

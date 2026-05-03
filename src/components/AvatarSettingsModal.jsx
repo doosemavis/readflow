@@ -57,7 +57,7 @@ export default function AvatarSettingsModal({ open, onOpenChange, onSave, curren
           </Dialog.Close>
 
           <Dialog.Title style={{ fontSize: 16, fontWeight: 720, color: t.fg, margin: "0 0 16px", fontFamily: "'DM Sans', sans-serif" }}>
-            Choose avatar
+            Choose Avatar
           </Dialog.Title>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 16 }}>
@@ -65,7 +65,21 @@ export default function AvatarSettingsModal({ open, onOpenChange, onSave, curren
               <button
                 key={id}
                 onClick={() => { onSave({ type: "premade", id, bg }); onOpenChange(false); }}
-                style={{ padding: 0, border: currentId === id ? `3px solid ${t.accent}` : "3px solid transparent", borderRadius: 14, cursor: "pointer", background: "none", boxShadow: currentId === id ? `0 0 0 2px ${t.accentSoft}` : "none", transition: "all 0.15s" }}
+                style={{
+                  // Lock button to SVG dimensions + center within grid cell —
+                  // otherwise the grid stretches the button to fill its 1fr
+                  // column, leaving uneven space on the sides while top/bottom
+                  // hug the SVG. justifySelf:center keeps the cell flexible.
+                  width: 44, height: 44, justifySelf: "center",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: 0, lineHeight: 0,
+                  border: "none",
+                  borderRadius: 10, cursor: "pointer", background: "none",
+                  boxShadow: currentId === id
+                    ? `0 0 0 1px ${t.bg}, 0 0 0 4px ${t.switchOn}`
+                    : "none",
+                  transition: "all 0.15s",
+                }}
                 aria-label={`Select avatar ${id}`}
               >
                 <PremadeAvatarSvg id={id} bg={bg} size={44} borderRadius={10} />

@@ -5,6 +5,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import App from "./App.jsx";
 import Privacy from "./pages/Privacy.jsx";
 import Terms from "./pages/Terms.jsx";
+import Account from "./pages/Account.jsx";
 import { AuthProvider } from "./contexts/AuthContext.jsx";
 import { ToastProvider } from "./components/Toast.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
@@ -25,6 +26,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                 <Route path="/" element={<App />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
+                <Route path="/account" element={<Account />} />
               </Routes>
             </ToastProvider>
           </AuthProvider>

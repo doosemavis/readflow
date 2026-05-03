@@ -1,4 +1,5 @@
-import { LogOut, Settings, ChevronDown, ChevronRight, User, ImageIcon, Palette, CreditCard, Trash2, Receipt, ExternalLink } from "lucide-react";
+import { LogOut, Settings, ChevronDown, ChevronRight, User, UserCircle, ImageIcon, Palette, CreditCard, Trash2, Receipt, ExternalLink } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
 import { PremadeAvatarSvg } from "./PremadeAvatarSvg";
@@ -28,6 +29,7 @@ function Avatar({ avatar, initial, accent, size = 28 }) {
 
 export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, onShowSubscription, onShowPaymentReceipts, showPaymentReceipts, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist }) {
   const { user, role, isOwner, signOut } = useAuth();
+  const navigate = useNavigate();
 
   if (!user) {
     return (
@@ -89,6 +91,14 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
                 sideOffset={4}
                 style={{ minWidth: 200, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12, padding: 4, boxShadow: "0 12px 32px rgba(0,0,0,0.15)", zIndex: 1100 }}
               >
+                <DropdownMenu.Item
+                  onSelect={() => navigate("/account")}
+                  onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  style={{ padding: "10px 12px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, outline: "none", userSelect: "none" }}
+                >
+                  <UserCircle size={14} style={{ color: t.icon }} /> Account
+                </DropdownMenu.Item>
                 <DropdownMenu.Item
                   onSelect={onShowAvatarSettings}
                   onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
