@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Rounded-square accent background — mirrors the landing page logo
+       widget (warm theme accent on accentSoft background tile). -->
+  <rect x="0" y="0" width="64" height="64" rx="14" ry="14" fill="#A85E14"/>
+  <!-- Lucide `book-open` icon (24×24 viewBox), centered + scaled to 36px,
+       drawn in white for max contrast on the accent fill. The y offset is
+       15 (not 14) to compensate for the icon's top-heavy visual weight —
+       page outlines sit in the top half, only the thin spine extends down. -->
+  <g transform="translate(14 15)" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="scale(1.5)">
+      <path d="M12 7v14"/>
+      <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>
+    </g>
+  </g>
+</svg>

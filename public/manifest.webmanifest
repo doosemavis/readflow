@@ -1,0 +1,17 @@
+{
+  "name": "ReadFlow — Adaptive Reading Enhancement",
+  "short_name": "ReadFlow",
+  "description": "A reader for documents that adapts to the way you read — typography, themes, and visual aids that make long-form text easier on every kind of brain.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FDFAF5",
+  "theme_color": "#A85E14",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}

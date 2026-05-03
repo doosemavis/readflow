@@ -116,7 +116,7 @@ export default function SubscriptionModal({ open, onOpenChange, sub, onShowPrici
                 <p style={{ fontSize: 18, fontWeight: 700, color: t.fg, margin: 0 }}>Free</p>
               </div>
               <p style={{ fontSize: 14, color: t.fgSoft, lineHeight: 1.55, margin: "0 0 16px" }}>
-                Unlock unlimited uploads, every theme, and the full feature set with Pro. Subscribe today for {PRICING.monthly.label} or {PRICING.annual.label} and save 25%!
+                Unlock unlimited uploads, every theme, and the full feature set with ReadFlow Pro. Subscribe today for {PRICING.monthly.label} or {PRICING.annual.label} and save 25%!
               </p>
               <button onClick={() => { onOpenChange(false); onShowPricing(); }} className="rf-btn-solid" style={{ width: "100%", padding: "12px 24px", borderRadius: 12, border: "none", background: t.accent, color: "#fff", cursor: "pointer", fontSize: 14, fontWeight: 670, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 <Crown size={15} /> See Pro plans

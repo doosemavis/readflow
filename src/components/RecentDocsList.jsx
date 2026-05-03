@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { X, ArrowRight } from "lucide-react";
+import { X, ArrowRight, Library } from "lucide-react";
 
 function timeAgo(ts) {
   const d = Date.now() - ts, m = Math.floor(d / 60000);
@@ -48,7 +48,21 @@ export const SidebarRecentDocs = memo(function SidebarRecentDocs({ recentList, f
 });
 
 export const LandingRecentDocs = memo(function LandingRecentDocs({ recentList, onLoad, isPro, t }) {
-  if (!recentList.length) return null;
+  if (!recentList.length) {
+    return (
+      <div style={{ marginTop: 32, width: "100%", maxWidth: 420 }}>
+        <p style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.06em", textTransform: "uppercase", margin: "0 0 10px", textAlign: "center" }}>Your Library</p>
+        <div style={{ borderRadius: 12, border: `1px dashed ${t.border}`, background: "transparent", padding: "28px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: t.surface, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Library size={18} strokeWidth={2.5} style={{ color: t.icon }} />
+          </div>
+          <p style={{ fontSize: 13, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", margin: 0, textAlign: "center", lineHeight: 1.5 }}>
+            Upload a document above to save it here for next time.
+          </p>
+        </div>
+      </div>
+    );
+  }
   const list = recentList.slice(0, 4);
   return (
     <div style={{ marginTop: 32, width: "100%", maxWidth: 420 }}>

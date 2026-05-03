@@ -12,6 +12,37 @@ import { THEMES, PALETTES, GUIDE_COLORS, FONTS, DEMO_TEXT } from "./config/const
 import { isThemeFree, isPaletteFree, isGuideColorFree } from "./config/proFeatures";
 import { getRevealColors } from "./config/themeColors";
 
+// Maps raw parser exceptions to user-friendly messages. Internal pdf.js /
+// EPub.js / mammoth error strings ("InvalidPDFException", "Cannot read
+// properties of undefined") are leaky and useless to a reader who just
+// wants to know "is the file broken or did I do something wrong."
+function mapParserErrorToMessage(ext, err) {
+  const raw = String(err?.message ?? err ?? "").toLowerCase();
+  // Already-friendly messages from our own throws — pass through.
+  if (raw.includes("readable text") || raw.includes("doesn't support") || raw.includes("file too large")) {
+    return err.message;
+  }
+  if (ext === "pdf") {
+    if (raw.includes("password") || raw.includes("encrypt")) {
+      return "This PDF is password-protected. ReadFlow can't open encrypted PDFs.";
+    }
+    if (raw.includes("invalid") || raw.includes("corrupt") || raw.includes("malformed")) {
+      return "This PDF appears corrupted. Try re-downloading it from the source.";
+    }
+    return "Couldn't read this PDF — it may be malformed or encrypted.";
+  }
+  if (ext === "epub") {
+    return "Couldn't read this EPUB — it may be DRM-protected or malformed.";
+  }
+  if (ext === "docx") {
+    return "Couldn't read this DOCX — try re-saving from Word as a fresh .docx file.";
+  }
+  if (ext === "html" || ext === "htm") {
+    return "Couldn't parse this HTML file. It may use unsupported encoding.";
+  }
+  return "Couldn't read this file. It may be corrupted or use an unsupported format.";
+}
+
 // Stable Slider format helpers (module-level so memo on Slider isn't busted each App render).
 const FMT_PX = v => `${v}px`;
 const FMT_LH = v => v.toFixed(2);
@@ -44,7 +75,7 @@ import {
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
   DocumentBody, useReadingGuide,
   UserMenu, PendingDeletionBanner, PostDeletionLockoutBanner,
-  DiaTextReveal, CatLoader,
+  DiaTextReveal, CatLoader, ErrorBoundary, Footer,
 } from "./components";
 
 // Modals are conditionally rendered and not needed at first paint, so
@@ -151,7 +182,6 @@ export default function App() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [checkoutBilling, setCheckoutBilling] = useState("monthly");
   const [showChapterNav, setShowChapterNav] = useState(false);
-  const [devBypass, setDevBypass] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
   // ── Refs ──
@@ -165,6 +195,29 @@ export default function App() {
   const t = useMemo(() => ({ ...THEMES[theme], key: theme }), [theme]);
   const currentFont = FONTS.find(f => f.name === fontFamily);
   const hasSections = docSections && docSections.length > 0 && (docSections.length > 1 || docSections[0]?.title);
+
+  // Sync favicon + browser-chrome theme-color to the active theme. SVG is
+  // regenerated as a data URI on each theme change; the `<link rel="icon">`
+  // and `<meta name="theme-color">` in index.html are mutated in place.
+  useEffect(() => {
+    // Pick white or near-black for the book icon based on the accent's
+    // perceived luminance — white on light accents (e.g. midnight's pale
+    // blue) reads as low-contrast mush, so flip to dark for those.
+    const r = parseInt(t.accent.slice(1, 3), 16) / 255;
+    const g = parseInt(t.accent.slice(3, 5), 16) / 255;
+    const b = parseInt(t.accent.slice(5, 7), 16) / 255;
+    const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+    const iconColor = luminance > 0.55 ? "#1A1A1A" : "#FFFFFF";
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${t.accent}"/><g transform="translate(14 15)" fill="none" stroke="${iconColor}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g transform="scale(1.5)"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></g></g></svg>`;
+    const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+
+    const links = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]');
+    links.forEach(link => { link.href = dataUri; });
+
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", t.accent);
+  }, [t.accent]);
 
   // ── Feature toggles (NeuroDiv/HueGuide/Focus) flip a CSS class on the document inner div via ref.
   //     Single className write, no React reconciliation through the Section subtree. ──
@@ -275,7 +328,7 @@ export default function App() {
     // Lockout users skip the "X free uploads used" paywall (it'd be a lie)
     // and go straight to the pricing modal — only path forward is subscribe.
     if (sub.isLockedOut) { setShowPricing(true); return; }
-    if (!sub.canUpload && !devBypass) { setShowPaywall(true); return; }
+    if (!sub.canUpload) { setShowPaywall(true); return; }
     // Pre-check file size against the server-derived per-tier ceiling.
     // The storage trigger enforces this too; this is the friendly UX gate
     // so the user doesn't watch a parse spinner before getting rejected.
@@ -286,13 +339,13 @@ export default function App() {
       return;
     }
     doUpload(file);
-  }, [user, sub.canUpload, sub.isLockedOut, sub.maxFileSize, sub.isPro, devBypass, showToast]);
+  }, [user, sub.canUpload, sub.isLockedOut, sub.maxFileSize, sub.isPro, showToast]);
 
   const doUpload = useCallback(async (file) => {
     setLoading(true); setLoadMsg("Reading file…");
     let sections;
+    const ext = file.name.split(".").pop().toLowerCase();
     try {
-      const ext = file.name.split(".").pop().toLowerCase();
       // Guard: reject anything outside the supported allowlist. Without this,
       // an image (.jpg/.png) or audio file falls through to the plain-text
       // branch and `.text()` decodes its binary bytes as UTF-8 garbage —
@@ -315,10 +368,11 @@ export default function App() {
       }
       setText(fullText); setDocSections(sections); setFileName(file.name);
     } catch (e) {
-      // Surface the error as a toast and leave existing reader/landing
-      // state intact — replacing `text` with an error string used to wipe
-      // out whatever the user was reading.
-      showToast(e.message, "error");
+      // Map raw parser exceptions to user-friendly per-format messages.
+      // The original exception is still in console for debugging.
+      console.error(`[doUpload] ${ext} parser threw:`, e);
+      const friendly = mapParserErrorToMessage(ext, e);
+      showToast(friendly, "error", 7000);
       setLoading(false); setLoadMsg("");
       return;
     }
@@ -452,15 +506,16 @@ export default function App() {
   // LANDING PAGE
   // ═══════════════════════════════════════════
   if (!text && !loading) return (
-    <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif", padding: 24 }}>
+    <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", fontFamily: "'DM Sans', sans-serif" }}>
       {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
       {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
       {modals}
       <div style={{ position: "fixed", top: 14, right: 16, zIndex: 100 }}>
         <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
       </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 520 }}>
-        <div style={{ width: 68, height: 68, borderRadius: 20, background: t.accentSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><BookOpen size={32} style={{ color: t.accent }} /></div>
+        <div style={{ width: 68, height: 68, borderRadius: 20, background: t.accentSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><BookOpen size={32} style={{ color: t.accent, transform: "translateY(1px)" }} /></div>
         <h1 style={{ fontSize: 36, fontWeight: 740, marginBottom: 6, letterSpacing: "-0.025em" }}>
           <DiaTextReveal
             text="ReadFlow"
@@ -471,7 +526,7 @@ export default function App() {
         </h1>
         <p style={{ fontSize: 15, color: t.fgSoft, marginBottom: 12, lineHeight: 1.6, maxWidth: 400, margin: "0 auto 12px", textWrap: "balance" }}>
           <DiaTextReveal
-            text="Adaptive reading enhancement with word anchoring, color-gradient tracking, focus mode, and full typography control."
+            text="Reading that adapts to you — typography, focus, and color tuned to the way your brain reads."
             colors={getRevealColors(theme)}
             textColor={t.fgSoft}
             duration={2}
@@ -510,6 +565,8 @@ export default function App() {
           })}
         </div>
       </div>
+      </div>
+      <Footer t={t} />
     </div>
   );
 
@@ -547,7 +604,6 @@ export default function App() {
             <div style={{ padding: "10px 0 2px" }}>
               <UploadBadge sub={sub} onUpgrade={() => setShowPricing(true)} onCancel={() => sub.cancelTrial()} t={t} />
               {/* DEV ONLY — admin role only */}
-              {role === "admin" && <div style={{ padding: "0 14px 4px" }}><button onClick={() => setDevBypass(!devBypass)} style={{ width: "100%", padding: "5px 10px", borderRadius: 7, border: `1px dashed ${devBypass ? "#22C55E" : "#E25C5C"}`, background: devBypass ? "#22C55E12" : "transparent", color: devBypass ? "#22C55E" : "#E25C5C", cursor: "pointer", fontSize: 10, fontWeight: 650, fontFamily: "monospace", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, boxSizing: "border-box" }}>{devBypass ? "✓ DEV: Uploads unlimited" : "⚙ DEV: Disable upload limit"}</button></div>}
             </div>
 
             <div style={{ padding: "10px 14px", borderBottom: `1px solid ${t.borderSoft}` }}>
@@ -683,7 +739,7 @@ export default function App() {
             </Section>
 
             <div style={{ padding: 14 }}>
-              <button onClick={() => (sub.canUpload || devBypass) ? fileRef.current?.click() : setShowPaywall(true)} className="rf-btn" style={{ width: "100%", padding: "10px 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 560, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxSizing: "border-box" }}><Upload size={14} /> Upload new file</button>
+              <button onClick={() => sub.canUpload ? fileRef.current?.click() : setShowPaywall(true)} className="rf-btn" style={{ width: "100%", padding: "10px 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 560, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxSizing: "border-box" }}><Upload size={14} /> Upload new file</button>
               <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) attemptUpload(f); }} />
             </div>
 
@@ -765,12 +821,19 @@ export default function App() {
           onScroll={() => guide.handleScroll()}
           style={{ flex: 1, overflowY: "auto", position: "relative", background: t.reader }}>
           {guide.renderOverlay(showGuide)}
-          <DocumentBody
-            text={text} docSections={docSections} hasSections={hasSections}
-            wrapperRef={handleDocWrapperRef} featureClassRef={handleFeatureClassRef}
-            settings={settings} focusModeRef={focusModeRef}
-            setFocusPara={setFocusPara} sectionRefs={sectionRefs}
-          />
+          <ErrorBoundary
+            t={t}
+            title="Couldn't render this document"
+            description="The reader hit an error displaying this file. It may be malformed or use unsupported markup. Try another document, or reset to clear the error."
+            onReset={() => { setText(""); setDocSections(null); setFileName(""); }}
+          >
+            <DocumentBody
+              text={text} docSections={docSections} hasSections={hasSections}
+              wrapperRef={handleDocWrapperRef} featureClassRef={handleFeatureClassRef}
+              settings={settings} focusModeRef={focusModeRef}
+              setFocusPara={setFocusPara} sectionRefs={sectionRefs}
+            />
+          </ErrorBoundary>
         </div>
       </div>
       </div>

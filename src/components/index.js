@@ -9,6 +9,9 @@ export { default as CatLoader } from "./CatLoader";
 export { default as PulsatingButton } from "./PulsatingButton";
 export { default as PendingDeletionBanner } from "./PendingDeletionBanner";
 export { default as PostDeletionLockoutBanner } from "./PostDeletionLockoutBanner";
+export { default as ErrorBoundary } from "./ErrorBoundary";
+export { default as Footer } from "./Footer";
+export { default as LegalLayout } from "./LegalLayout";
 // Modals (PricingModal, PaywallModal, CheckoutModal, AuthModal, AdminPanel,
 // AvatarSettingsModal) are intentionally NOT re-exported here. They're
 // loaded lazily via React.lazy in App.jsx — re-exporting them through this
