@@ -68,14 +68,37 @@ export default function ContactModal({ open, onOpenChange, t }) {
             </button>
           </div>
 
-          <a
-            href={`mailto:${SUPPORT_EMAIL}`}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", textDecoration: "none" }}
-            onMouseEnter={e => e.currentTarget.style.color = t.accent}
-            onMouseLeave={e => e.currentTarget.style.color = t.fgSoft}
-          >
-            Open in your mail client <ExternalLink size={11} />
-          </a>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 14px", fontSize: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif" }}>
+            <span>Or open in:</span>
+            <a
+              href={`https://mail.google.com/mail/?view=cm&fs=1&to=${SUPPORT_EMAIL}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, color: t.fgSoft, textDecoration: "none" }}
+              onMouseEnter={e => e.currentTarget.style.color = t.accent}
+              onMouseLeave={e => e.currentTarget.style.color = t.fgSoft}
+            >
+              Gmail <ExternalLink size={11} />
+            </a>
+            <a
+              href={`https://outlook.live.com/owa/?path=/mail/action/compose&to=${SUPPORT_EMAIL}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, color: t.fgSoft, textDecoration: "none" }}
+              onMouseEnter={e => e.currentTarget.style.color = t.accent}
+              onMouseLeave={e => e.currentTarget.style.color = t.fgSoft}
+            >
+              Outlook <ExternalLink size={11} />
+            </a>
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, color: t.fgSoft, textDecoration: "none" }}
+              onMouseEnter={e => e.currentTarget.style.color = t.accent}
+              onMouseLeave={e => e.currentTarget.style.color = t.fgSoft}
+            >
+              Default mail app
+            </a>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
