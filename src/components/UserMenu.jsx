@@ -1,4 +1,4 @@
-import { LogOut, Settings, ChevronDown, ChevronRight, User, ImageIcon, Palette, CreditCard, Trash2 } from "lucide-react";
+import { LogOut, Settings, ChevronDown, ChevronRight, User, ImageIcon, Palette, CreditCard, Trash2, Receipt, ExternalLink } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
 import { PremadeAvatarSvg } from "./PremadeAvatarSvg";
@@ -26,7 +26,7 @@ function Avatar({ avatar, initial, accent, size = 28 }) {
   );
 }
 
-export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, onShowSubscription, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist }) {
+export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, onShowSubscription, onShowPaymentReceipts, showPaymentReceipts, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist }) {
   const { user, role, signOut } = useAuth();
 
   if (!user) {
@@ -105,6 +105,19 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
                 >
                   <CreditCard size={14} style={{ color: t.icon }} /> Manage subscription
                 </DropdownMenu.Item>
+                {showPaymentReceipts && (
+                  <DropdownMenu.Item
+                    onSelect={onShowPaymentReceipts}
+                    onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                    style={{ padding: "10px 12px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between", borderRadius: 8, outline: "none", userSelect: "none" }}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Receipt size={14} style={{ color: t.icon }} /> Payment receipts
+                    </span>
+                    <ExternalLink size={11} style={{ color: t.icon }} />
+                  </DropdownMenu.Item>
+                )}
                 {role === "admin" && (
                   <DropdownMenu.Item
                     onSelect={onShowAdmin}

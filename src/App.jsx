@@ -31,6 +31,7 @@ const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, 
 const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
 const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure, runThemeTransition } from "./utils";
+import { supabase } from "./utils/supabase";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
 import { useAvatar } from "./hooks/useAvatar";
@@ -142,7 +143,7 @@ export default function App() {
   }, [themePref, theme]);
 
   // ── Subscription & modals ──
-  const sub = useSubscription(role);
+  const sub = useSubscription(role, user);
   const recentDocs = useRecentDocs(!authLoading, user?.id);
   const [showPricing, setShowPricing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -341,7 +342,48 @@ export default function App() {
     setCheckoutBilling(billing);
     setShowCheckout(true);
   }, [user, showToast]);
-  const handleCheckoutSuccess = useCallback((billing) => { setShowCheckout(false); if (!sub.isTrial && sub.plan === "free") sub.startTrial(billing); else sub.activatePro(billing); }, [sub]);
+  // Open Stripe's hosted Customer Portal in the same tab. The function only
+  // returns a URL if the user has a stripe_customer_id; we gate the menu
+  // item on sub.hasStripeHistory so only past/current subscribers see it.
+  const handleShowPaymentReceipts = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not signed in");
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-portal-session`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ returnUrl: window.location.origin }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Couldn't open portal");
+      window.location.href = json.url;
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  }, [showToast]);
+
+  // Stripe Checkout return: read ?checkout=success or ?checkout=cancel set
+  // by create-checkout-session, surface a toast, then clean the URL so a
+  // refresh doesn't re-fire the toast. Subscription state itself is driven
+  // by the realtime listener in useSubscription — no fetch needed here.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("checkout");
+    if (!status) return;
+    if (status === "success") {
+      showToast("Welcome to Pro! Your trial has started.", "success");
+    } else if (status === "cancel") {
+      showToast("Checkout canceled.", "info");
+    }
+    params.delete("checkout");
+    params.delete("session_id");
+    const search = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (search ? `?${search}` : ""));
+  }, [showToast]);
 
   // ── Modals ──
   // Wrapped in Suspense because each modal is React.lazy. Fallback is null
@@ -350,7 +392,7 @@ export default function App() {
   const modals = (
     <Suspense fallback={null}>
       {showPricing && <PricingModal onClose={() => setShowPricing(false)} onSelectPlan={handleSelectPlan} hasUsedTrial={sub.isTrial || sub.plan === "pro"} t={t} />}
-      {showCheckout && <CheckoutModal billing={checkoutBilling} hasUsedTrial={sub.isTrial || sub.plan === "pro"} onSuccess={handleCheckoutSuccess} onClose={() => setShowCheckout(false)} t={t} />}
+      {showCheckout && <CheckoutModal billing={checkoutBilling} onClose={() => setShowCheckout(false)} t={t} />}
       {showPaywall && <PaywallModal uploadsUsed={sub.uploadsUsed} onUpgrade={() => { setShowPaywall(false); setShowPricing(true); }} onClose={() => setShowPaywall(false)} t={t} />}
       {showAuth && <AuthModal onClose={() => { setShowAuth(false); clearRecovery?.(); }} t={t} initialView={isRecovering ? "setPassword" : "login"} />}
       {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} t={t} />}
@@ -382,7 +424,7 @@ export default function App() {
       {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
       {modals}
       <div style={{ position: "fixed", top: 14, right: 16, zIndex: 100 }}>
-        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
+        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
       </div>
       <div style={{ textAlign: "center", maxWidth: 520 }}>
         <div style={{ width: 68, height: 68, borderRadius: 20, background: t.accentSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><BookOpen size={32} style={{ color: t.accent }} /></div>
@@ -630,7 +672,7 @@ export default function App() {
               </Tip>
             ))}
           </div>
-          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
+          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
         </div>
 
         {/* Reader scroll area */}

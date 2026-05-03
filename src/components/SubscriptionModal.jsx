@@ -5,6 +5,7 @@ import { TRIAL_DAYS, PRICING } from "../config/constants";
 import { useToast } from "./Toast";
 import { Tip } from "./Primitives";
 import PulsatingButton from "./PulsatingButton";
+import { supabase } from "../utils/supabase";
 
 const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1010 };
 
@@ -14,57 +15,80 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
-// Phase 9 will replace this with the real current_period_end from Stripe.
-// For now: assume the user's current period started at trialStart (or now)
-// and ends one billing cycle later. Placeholder; intentionally NOT a clock.
-function placeholderPeriodEnd(trialStart, billingCycle) {
-  const start = trialStart ?? Date.now();
-  const days = billingCycle === "annual" ? 365 : 30;
-  return start + days * 86400000;
-}
-
 export default function SubscriptionModal({ open, onOpenChange, sub, onShowPricing, t }) {
   const { showToast } = useToast();
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const isFree = !sub.isPro;
   const isTrial = sub.isTrial;
   const isPro = sub.isPro && !sub.isTrial;
 
-  // billingCycle can be null (admin bypass, or trial users who haven't yet
-  // chosen a cycle). Display logic treats null as "monthly", so the upgrade
-  // button must use the same convention or the two go out of sync.
+  // billingCycle can be null (admin bypass). Display logic treats null as
+  // "monthly", so the upgrade button must use the same convention.
   const isAnnual = sub.billingCycle === "annual";
-  const isMonthly = !isAnnual; // includes null/undefined for consistency
+  const isMonthly = !isAnnual;
   const cyclePricing = PRICING[sub.billingCycle] ?? PRICING.monthly;
 
   const trialEnd = sub.trialDaysLeft != null && sub.isTrial
     ? Date.now() + sub.trialDaysLeft * 86400000
     : null;
-  const proPeriodEnd = isPro ? placeholderPeriodEnd(null, sub.billingCycle) : null;
+  // current_period_end is set by the webhook from Stripe; null for admin bypass.
+  const proPeriodEnd = isPro ? sub.currentPeriodEnd : null;
 
-  const handleCancelTrial = () => {
-    sub.cancelTrial();
-    showToast("Trial cancelled. You're back on the free plan.", "info");
-    setConfirmingCancel(false);
-    onOpenChange(false);
+  const handleCancelTrial = async () => {
+    setBusy(true);
+    try {
+      await sub.cancelSubscription();
+      showToast("Trial cancelled. You're back on the free plan.", "info");
+      setConfirmingCancel(false);
+      onOpenChange(false);
+    } catch (err) {
+      showToast(err.message || "Cancellation failed", "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  // Phase 9: wire up Stripe cancel-at-period-end here. Today this is a fake
-  // local downgrade — real subscription cancellation needs the backend.
-  const handleCancelPro = () => {
-    sub.cancelTrial(); // same local effect: clears plan to free
-    showToast("Subscription cancelled. (Stripe integration coming in Phase 9.)", "info");
-    setConfirmingCancel(false);
-    onOpenChange(false);
+  const handleCancelPro = async () => {
+    setBusy(true);
+    try {
+      await sub.cancelSubscription();
+      showToast("Subscription cancelled. You'll keep Pro until the end of your billing period.", "info");
+      setConfirmingCancel(false);
+      onOpenChange(false);
+    } catch (err) {
+      showToast(err.message || "Cancellation failed", "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  // Phase 9: replace with Stripe subscription update (swap price ID to annual,
-  // prorate the difference). Today this is a fake local switch.
-  const handleUpgradeToAnnual = () => {
-    sub.activatePro("annual");
-    showToast("Switched to annual billing. (Stripe integration coming in Phase 9.)", "success");
-    onOpenChange(false);
+  // Swaps the Stripe subscription's price from monthly to annual. Stripe
+  // prorates automatically; the webhook updates the row + UI within ~1s.
+  const handleUpgradeToAnnual = async () => {
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not signed in");
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-subscription-plan`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ billingCycle: "annual" }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Upgrade failed");
+      showToast("Switched to annual billing. Welcome to the long game.", "success");
+      onOpenChange(false);
+    } catch (err) {
+      showToast(err.message || "Upgrade failed", "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -92,7 +116,7 @@ export default function SubscriptionModal({ open, onOpenChange, sub, onShowPrici
                 <p style={{ fontSize: 18, fontWeight: 700, color: t.fg, margin: 0 }}>Free</p>
               </div>
               <p style={{ fontSize: 14, color: t.fgSoft, lineHeight: 1.55, margin: "0 0 16px" }}>
-                Unlock unlimited uploads, every theme, and the full feature set with Pro. Starts at {PRICING.annual.effectiveMonthly} (billed annually) or {PRICING.monthly.label}.
+                Unlock unlimited uploads, every theme, and the full feature set with Pro. Subscribe today for {PRICING.monthly.label} or {PRICING.annual.label} and save 25%!
               </p>
               <button onClick={() => { onOpenChange(false); onShowPricing(); }} className="rf-btn-solid" style={{ width: "100%", padding: "12px 24px", borderRadius: 12, border: "none", background: t.accent, color: "#fff", cursor: "pointer", fontSize: 14, fontWeight: 670, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 <Crown size={15} /> See Pro plans
@@ -126,7 +150,7 @@ export default function SubscriptionModal({ open, onOpenChange, sub, onShowPrici
                   </p>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={() => setConfirmingCancel(false)} style={{ flex: 1, padding: "10px 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: "transparent", color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 550 }}>Keep trial</button>
-                    <button onClick={handleCancelTrial} style={{ flex: 1, padding: "10px 16px", borderRadius: 10, border: "none", background: "#E25C5C", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Cancel trial</button>
+                    <button onClick={handleCancelTrial} disabled={busy} style={{ flex: 1, padding: "10px 16px", borderRadius: 10, border: "none", background: "#E25C5C", color: "#fff", cursor: busy ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600, opacity: busy ? 0.7 : 1 }}>{busy ? "Cancelling…" : "Cancel trial"}</button>
                   </div>
                 </div>
               )}
@@ -154,10 +178,11 @@ export default function SubscriptionModal({ open, onOpenChange, sub, onShowPrici
                         duration="1.6s"
                         distance="10px"
                         onClick={handleUpgradeToAnnual}
+                        disabled={busy}
                         className="rf-btn-solid"
-                        style={{ flex: 1, minWidth: 0, padding: "11px 16px", borderRadius: 12, border: "none", background: t.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 660, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                        style={{ flex: 1, minWidth: 0, padding: "11px 16px", borderRadius: 12, border: "none", background: t.accent, color: "#fff", cursor: busy ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 660, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: busy ? 0.7 : 1 }}
                       >
-                        <TrendingUp size={14} /> Upgrade to Annual
+                        <TrendingUp size={14} /> {busy ? "Switching…" : "Upgrade to Annual"}
                       </PulsatingButton>
                     </Tip>
                   )}
@@ -172,7 +197,7 @@ export default function SubscriptionModal({ open, onOpenChange, sub, onShowPrici
                   </p>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={() => setConfirmingCancel(false)} style={{ flex: 1, padding: "10px 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: "transparent", color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 550 }}>Keep subscription</button>
-                    <button onClick={handleCancelPro} style={{ flex: 1, padding: "10px 16px", borderRadius: 10, border: "none", background: "#E25C5C", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Cancel subscription</button>
+                    <button onClick={handleCancelPro} disabled={busy} style={{ flex: 1, padding: "10px 16px", borderRadius: 10, border: "none", background: "#E25C5C", color: "#fff", cursor: busy ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600, opacity: busy ? 0.7 : 1 }}>{busy ? "Cancelling…" : "Cancel subscription"}</button>
                   </div>
                 </div>
               )}
