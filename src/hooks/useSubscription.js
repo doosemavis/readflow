@@ -20,6 +20,17 @@ export function useSubscription(role, user) {
   const [maxFileSize, setMaxFileSize] = useState(26214400); // 25 MB default
   const [uploadsLoaded, setUploadsLoaded] = useState(false);
 
+  // Post-deletion lockout (anti-abuse): if this email had its account deleted
+  // within the last 6 months, free-tier benefits are suspended until the
+  // lockout expires or they subscribe. ISO timestamp string (or null).
+  const [lockoutUntil, setLockoutUntil] = useState(null);
+  const [lockoutLoaded, setLockoutLoaded] = useState(false);
+
+  // Gifted Pro access (granted by owner/admin via grant_pro_access RPC).
+  // ISO timestamp; treated as Pro while in the future. No real Stripe sub.
+  const [proGrantUntil, setProGrantUntil] = useState(null);
+  const [proGrantLoaded, setProGrantLoaded] = useState(false);
+
   // Refetches upload allowance from the server. Single source of truth —
   // server resets the monthly counter at the calendar boundary, so we don't
   // do month math on the client.
@@ -43,6 +54,54 @@ export function useSubscription(role, user) {
   }, [user?.id]);
 
   useEffect(() => { refetchUploadAllowance(); }, [refetchUploadAllowance]);
+
+  // Fetch lockout once on user change. Doesn't need refetching during a
+  // session — lockout state can only change via account deletion (which
+  // signs the user out anyway).
+  useEffect(() => {
+    if (!user?.id) {
+      setLockoutUntil(null);
+      setLockoutLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.rpc("my_post_deletion_lockout_until");
+      if (cancelled) return;
+      if (error) {
+        console.warn("my_post_deletion_lockout_until failed:", error.message);
+        setLockoutLoaded(true);
+        return;
+      }
+      setLockoutUntil(data ?? null);
+      setLockoutLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  // Refetches the gifted Pro grant from profiles. Exposed so the AdminPanel
+  // gift form can refresh the granter's own state if they grant themselves.
+  const refetchProGrant = useCallback(async () => {
+    if (!user?.id) {
+      setProGrantUntil(null);
+      setProGrantLoaded(true);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("pro_grant_until")
+      .eq("id", user.id)
+      .single();
+    if (error) {
+      console.warn("pro_grant_until fetch failed:", error.message);
+      setProGrantLoaded(true);
+      return;
+    }
+    setProGrantUntil(data?.pro_grant_until ?? null);
+    setProGrantLoaded(true);
+  }, [user?.id]);
+
+  useEffect(() => { refetchProGrant(); }, [refetchProGrant]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -97,8 +156,10 @@ export function useSubscription(role, user) {
   const status = subRow?.status;
   const isTrialing = status === "trialing";
   const isActiveOrPastDue = status === "active" || status === "past_due";
+  const isProGrantActive = !!proGrantUntil &&
+    new Date(proGrantUntil).getTime() > Date.now();
 
-  const isPro = adminBypass || isTrialing || isActiveOrPastDue;
+  const isPro = adminBypass || isTrialing || isActiveOrPastDue || isProGrantActive;
   const isTrial = isTrialing && !adminBypass;
   const plan = adminBypass
     ? "pro"
@@ -106,7 +167,9 @@ export function useSubscription(role, user) {
       ? "trial"
       : isActiveOrPastDue
         ? "pro"
-        : "free";
+        : isProGrantActive
+          ? "pro"
+          : "free";
   const billingCycle = subRow?.billing_cycle ?? null;
   const isPastDue = status === "past_due";
   const cancelAtPeriodEnd = subRow?.cancel_at_period_end ?? false;
@@ -117,12 +180,19 @@ export function useSubscription(role, user) {
     ? Math.max(0, Math.ceil((new Date(subRow.trial_end).getTime() - Date.now()) / 86400000))
     : 0;
 
+  // Post-deletion lockout: free-tier features suspended until the date passes
+  // OR the user subscribes (Pro/Trial bypasses the lockout — they're paying).
+  // adminBypass also bypasses (owner shouldn't be locked out by their own data).
+  const isLockedOut = !!lockoutUntil && !isPro && !adminBypass &&
+    new Date(lockoutUntil).getTime() > Date.now();
+
   // Server-derived limit (uploadLimit) wins over the role-based override.
   // adminBypass still short-circuits to Infinity for our owner account.
-  const effectiveLimit = adminBypass ? Infinity : uploadLimit;
-  const canUpload = uploadsUsed < effectiveLimit;
+  // Lockout zeroes the limit so canUpload is false regardless of count.
+  const effectiveLimit = adminBypass ? Infinity : (isLockedOut ? 0 : uploadLimit);
+  const canUpload = !isLockedOut && uploadsUsed < effectiveLimit;
 
-  const loaded = subLoaded && uploadsLoaded;
+  const loaded = subLoaded && uploadsLoaded && lockoutLoaded && proGrantLoaded;
 
   // Increments the server counter via RPC, then mirrors the change locally.
   // Callers should already have checked canUpload before invoking; this is
@@ -175,6 +245,11 @@ export function useSubscription(role, user) {
     maxFileSize,
     canUpload,
     loaded,
+    isLockedOut,
+    lockoutUntil,
+    isProGrantActive,
+    proGrantUntil,
+    refetchProGrant,
     recordUpload,
     refetchUploadAllowance,
     cancelSubscription,

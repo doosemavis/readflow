@@ -11,6 +11,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState("user");
+  const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   // Pending account-deletion state, mirrored from profiles table.
   // null = active account; ISO string = scheduled deletion timestamp.
@@ -28,12 +29,12 @@ export function AuthProvider({ children }) {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("role, deletion_requested_at, deletion_effective_at")
+        .select("role, deletion_requested_at, deletion_effective_at, is_owner")
         .eq("id", userId)
         .single();
       if (!error && data) return data;
     } catch {}
-    return { role: "user", deletion_requested_at: null, deletion_effective_at: null };
+    return { role: "user", deletion_requested_at: null, deletion_effective_at: null, is_owner: false };
   }, []);
 
   // Refetches just the deletion fields. Used after the user reactivates
@@ -82,12 +83,14 @@ export function AuthProvider({ children }) {
         fetchProfile(session.user.id).then(profile => {
           if (!mounted) return;
           setRole(profile.role ?? "user");
+          setIsOwner(!!profile.is_owner);
           setDeletionRequestedAt(profile.deletion_requested_at ?? null);
           setDeletionEffectiveAt(profile.deletion_effective_at ?? null);
         });
       } else if (!session?.user || signedOutRef.current) {
         setUser(null);
         setRole("user");
+        setIsOwner(false);
         setDeletionRequestedAt(null);
         setDeletionEffectiveAt(null);
         clearUserScope();
@@ -137,6 +140,7 @@ export function AuthProvider({ children }) {
       setUserScope(json.user.id);
       fetchProfile(json.user.id).then(profile => {
         setRole(profile.role ?? "user");
+        setIsOwner(!!profile.is_owner);
         setDeletionRequestedAt(profile.deletion_requested_at ?? null);
         setDeletionEffectiveAt(profile.deletion_effective_at ?? null);
       });
@@ -197,6 +201,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(storageKey);
     setUser(null);
     setRole("user");
+    setIsOwner(false);
     setDeletionRequestedAt(null);
     setDeletionEffectiveAt(null);
     clearUserScope();
@@ -232,7 +237,7 @@ export function AuthProvider({ children }) {
   const permissions = getRolePermissions(role);
 
   return (
-    <AuthContext.Provider value={{ user, role, permissions, loading, signUp, signIn, signOut, resetPassword, updatePassword, signInWithOAuth, deletionRequestedAt, deletionEffectiveAt, refreshDeletionStatus, isRecovering, clearRecovery }}>
+    <AuthContext.Provider value={{ user, role, isOwner, permissions, loading, signUp, signIn, signOut, resetPassword, updatePassword, signInWithOAuth, deletionRequestedAt, deletionEffectiveAt, refreshDeletionStatus, isRecovering, clearRecovery }}>
       {children}
     </AuthContext.Provider>
   );

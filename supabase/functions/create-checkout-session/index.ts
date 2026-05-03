@@ -94,19 +94,38 @@ Deno.serve(async (req) => {
   const successUrl = `${returnUrl}${sep}checkout=success&session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = `${returnUrl}${sep}checkout=cancel`;
 
+  // Anti-abuse: skip the 14-day free trial if this email has ever trialed
+  // before (across all account incarnations — the check is keyed on email
+  // in account_history, which survives deletion). Repeat customers get
+  // charged immediately on Checkout instead.
+  let trialEligible = true;
+  if (user.email) {
+    const { data: hasUsed, error: trialErr } = await admin.rpc(
+      "email_has_used_trial",
+      { check_email: user.email },
+    );
+    if (!trialErr && hasUsed === true) {
+      trialEligible = false;
+    }
+  }
+
+  const subscriptionData: Record<string, unknown> = {
+    metadata: { user_id: user.id, billing_cycle: billingCycle },
+  };
+  if (trialEligible) {
+    subscriptionData.trial_period_days = 14;
+  }
+
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    subscription_data: {
-      trial_period_days: 14,
-      metadata: { user_id: user.id, billing_cycle: billingCycle },
-    },
-    metadata: { user_id: user.id, billing_cycle: billingCycle },
+    subscription_data: subscriptionData,
+    metadata: { user_id: user.id, billing_cycle: billingCycle, trial_eligible: String(trialEligible) },
     success_url: successUrl,
     cancel_url: cancelUrl,
     allow_promotion_codes: true,
   });
 
-  return jsonResponse({ url: session.url });
+  return jsonResponse({ url: session.url, trialEligible });
 });

@@ -27,7 +27,7 @@ function Avatar({ avatar, initial, accent, size = 28 }) {
 }
 
 export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, onShowSubscription, onShowPaymentReceipts, showPaymentReceipts, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist }) {
-  const { user, role, signOut } = useAuth();
+  const { user, role, isOwner, signOut } = useAuth();
 
   if (!user) {
     return (
@@ -118,7 +118,7 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
                     <ExternalLink size={11} style={{ color: t.icon }} />
                   </DropdownMenu.Item>
                 )}
-                {role === "admin" && (
+                {(role === "admin" || isOwner) && (
                   <DropdownMenu.Item
                     onSelect={onShowAdmin}
                     onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}

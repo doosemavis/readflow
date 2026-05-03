@@ -77,6 +77,52 @@ async function upsertSubscription(sub: Stripe.Subscription) {
     console.error(`Failed to upsert subscription ${sub.id}:`, error);
     throw error;
   }
+
+  // Anti-abuse: append-only history keyed by lowercase email. Idempotent —
+  // we only insert if no prior row of this event_type exists for the email.
+  await recordHistoryEvents(userId, sub);
+}
+
+// Mirror lifecycle events into account_history so the per-email anti-abuse
+// rules (no second free trial, 6-month post-deletion lockout) have a record
+// that survives auth.users deletion.
+async function recordHistoryEvents(userId: string, sub: Stripe.Subscription) {
+  const { data: userRow, error: userErr } = await admin.auth.admin.getUserById(userId);
+  if (userErr || !userRow?.user?.email) return;
+  const email = userRow.user.email.toLowerCase();
+
+  const events: string[] = [];
+  if (sub.trial_end != null && sub.status !== "incomplete_expired") {
+    events.push("trial_used");
+  }
+  if (sub.status === "active" || sub.status === "past_due") {
+    events.push("paid_started");
+  }
+  if (sub.status === "canceled") {
+    events.push("canceled");
+  }
+
+  for (const eventType of events) {
+    // Idempotency: only one row per (email, event_type). Stripe redelivers
+    // events on failure, and customer.subscription.updated fires on every
+    // status change — we don't want a flood of duplicate rows.
+    const { data: existing } = await admin
+      .from("account_history")
+      .select("id")
+      .eq("email", email)
+      .eq("event_type", eventType)
+      .limit(1);
+    if (existing && existing.length > 0) continue;
+
+    const { error: insErr } = await admin.from("account_history").insert({
+      email,
+      event_type: eventType,
+      metadata: { user_id: userId, stripe_subscription_id: sub.id },
+    });
+    if (insErr) {
+      console.error(`account_history insert failed for ${email}/${eventType}:`, insErr);
+    }
+  }
 }
 
 Deno.serve(async (req) => {

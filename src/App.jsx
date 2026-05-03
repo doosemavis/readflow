@@ -43,7 +43,7 @@ import {
   Toggle, Slider, Segment, Section, FontPicker, Tip,
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
   DocumentBody, useReadingGuide,
-  UserMenu, PendingDeletionBanner,
+  UserMenu, PendingDeletionBanner, PostDeletionLockoutBanner,
   DiaTextReveal, CatLoader,
 } from "./components";
 
@@ -272,6 +272,9 @@ export default function App() {
   const attemptUpload = useCallback((file) => {
     if (!file) return;
     if (!user) { setShowAuth(true); return; }
+    // Lockout users skip the "X free uploads used" paywall (it'd be a lie)
+    // and go straight to the pricing modal — only path forward is subscribe.
+    if (sub.isLockedOut) { setShowPricing(true); return; }
     if (!sub.canUpload && !devBypass) { setShowPaywall(true); return; }
     // Pre-check file size against the server-derived per-tier ceiling.
     // The storage trigger enforces this too; this is the friendly UX gate
@@ -283,7 +286,7 @@ export default function App() {
       return;
     }
     doUpload(file);
-  }, [user, sub.canUpload, sub.maxFileSize, sub.isPro, devBypass, showToast]);
+  }, [user, sub.canUpload, sub.isLockedOut, sub.maxFileSize, sub.isPro, devBypass, showToast]);
 
   const doUpload = useCallback(async (file) => {
     setLoading(true); setLoadMsg("Reading file…");
@@ -451,6 +454,7 @@ export default function App() {
   if (!text && !loading) return (
     <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif", padding: 24 }}>
       {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
+      {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
       {modals}
       <div style={{ position: "fixed", top: 14, right: 16, zIndex: 100 }}>
         <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} />
@@ -526,6 +530,7 @@ export default function App() {
   return (
     <div style={{ height: "100vh", overflow: "hidden", background: t.bg, color: t.fg, fontFamily: "'DM Sans', sans-serif", display: "flex", flexDirection: "column" }}>
       {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
+      {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
       {modals}
 
