@@ -25,6 +25,15 @@ export const PALETTES = {
   lavender: { label: "Lavender", colors: ["#7B2D8E","#9B59B6","#BB8FCE","#D2B4DE","#EBDEF0"] },
   ember:    { label: "Ember",    colors: ["#D62828","#E85D04","#F48C06","#FAA307","#FCBF49"] },
   mono:     { label: "Mono",     colors: ["#333","#555","#777","#999","#BBB"] },
+  // Colorblind-safe gradients sampled from established CVD-friendly
+  // colormaps. Each stays distinguishable across deuteranopia,
+  // protanopia, and tritanopia by combining hue shift with monotonic
+  // luminance — so even when hue collapses for a given vision type,
+  // the lightness gradient still cues word position across a line.
+  aurora:   { label: "Aurora",   colors: ["#440154","#3B528B","#21918C","#5EC962","#FDE725"], cvdSafe: true }, // Viridis
+  beacon:   { label: "Beacon",   colors: ["#00224E","#404C6B","#7C7B78","#B6A565","#FEE838"], cvdSafe: true }, // Cividis
+  prism:    { label: "Prism",    colors: ["#0072B2","#56B4E9","#009E73","#F0E442","#E69F00"], cvdSafe: true }, // Okabe-Ito
+  vivid:    { label: "Vivid",    colors: ["#4477AA","#66CCEE","#228833","#CCBB44","#EE6677"], cvdSafe: true }, // Tol Bright
 };
 
 export const GUIDE_COLORS = {

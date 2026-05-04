@@ -106,6 +106,7 @@ export default function App() {
   const [neuroDivIntensity, setNeuroDivIntensity] = useState(0.42);
   const [hueGuide, setHueGuide] = useState(false);
   const [huePalette, setHuePalette] = useState("ocean");
+  const [hueIntensity, setHueIntensity] = useState(1);  // 0 = plain text fg, 1 = full palette
   const [focusMode, setFocusMode] = useState(false);
   const [focusPara, setFocusPara] = useState(-1);
   const [guideDimOpacity, setGuideDimOpacity] = useState(0.25);
@@ -277,8 +278,9 @@ export default function App() {
     el.style.setProperty("--rf-letter-spacing", `${s.letterSpacing}px`);
     el.style.setProperty("--rf-word-spacing", `${s.wordSpacing}px`);
     el.style.setProperty("--rf-text-align", s.textAlign || "left");
+    el.style.setProperty("--rf-hue-intensity", String(hueIntensity));
     if (s.currentFontCss) el.style.setProperty("--rf-font-family", s.currentFontCss);
-  }, []);
+  }, [hueIntensity]);
 
   // Per-slider live writers: write a single CSS var directly to the wrapper on every drag tick.
   // App state isn't touched during drag — we update it once on release via the slider's onChange.
@@ -288,6 +290,7 @@ export default function App() {
     columnWidth: v => docWrapperRef.current?.style.setProperty("--rf-column-width", `${v}%`),
     letterSpacing: v => docWrapperRef.current?.style.setProperty("--rf-letter-spacing", `${v}px`),
     wordSpacing: v => docWrapperRef.current?.style.setProperty("--rf-word-spacing", `${v}px`),
+    hueIntensity: v => docWrapperRef.current?.style.setProperty("--rf-hue-intensity", String(v)),
   }), []);
 
   // Callback ref: writes vars synchronously the moment DocumentBody's wrapper mounts.
@@ -307,7 +310,7 @@ export default function App() {
       writeTypographyVars();
     });
     return () => { if (typographyRafRef.current) cancelAnimationFrame(typographyRafRef.current); };
-  }, [fontSize, lineHeight, columnWidth, letterSpacing, wordSpacing, textAlign, currentFontCss, writeTypographyVars]);
+  }, [fontSize, lineHeight, columnWidth, letterSpacing, wordSpacing, textAlign, currentFontCss, hueIntensity, writeTypographyVars]);
 
   // ── Render settings: only props that genuinely change paragraph/section JSX (palette colors, bold split, theme). ──
   //     NeuroDiv/HueGuide/Focus are NOT here — they flip via featureClassRef and never trigger Section re-renders.
@@ -621,18 +624,20 @@ export default function App() {
               {hueGuide && <div style={{ padding: "6px 12px", display: "flex", flexWrap: "wrap", gap: 6 }}>{Object.entries(PALETTES).map(([k, pal]) => {
                 const free = isPaletteFree(k);
                 const locked = !sub.isPro && !free;
+                const tipLabel = `${pal.label}${pal.cvdSafe ? " · colorblind-safe" : ""}${locked ? " (Pro)" : ""}`;
                 return (
-                  <button
-                    key={k}
-                    onClick={() => gateCosmetic(free, () => setHuePalette(k))}
-                    title={`${pal.label}${locked ? " (Pro)" : ""}`}
-                    style={{ position: "relative", width: 42, height: 26, borderRadius: 8, overflow: "hidden", display: "flex", padding: 0, cursor: "pointer", border: huePalette === k ? `2px solid ${t.accent}` : `1px solid ${t.border}`, boxShadow: huePalette === k ? `0 0 0 2px ${t.accentSoft}` : "none", transition: "all 0.15s", opacity: locked ? 0.55 : 1 }}
-                  >
-                    {pal.colors.map((c, i) => <div key={i} style={{ flex: 1, background: c, height: "100%" }} />)}
-                    {locked && <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Lock size={11} style={{ color: "#fff", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} /></span>}
-                  </button>
+                  <Tip key={k} label={tipLabel} t={t} side="top">
+                    <button
+                      onClick={() => gateCosmetic(free, () => setHuePalette(k))}
+                      style={{ position: "relative", width: 42, height: 26, borderRadius: 8, overflow: "hidden", display: "flex", padding: 0, cursor: "pointer", border: huePalette === k ? `2px solid ${t.accent}` : `1px solid ${t.border}`, boxShadow: huePalette === k ? `0 0 0 2px ${t.accentSoft}` : "none", transition: "all 0.15s", opacity: locked ? 0.55 : 1 }}
+                    >
+                      {pal.colors.map((c, i) => <div key={i} style={{ flex: 1, background: c, height: "100%" }} />)}
+                      {locked && <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Lock size={11} style={{ color: "#fff", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }} /></span>}
+                    </button>
+                  </Tip>
                 );
               })}</div>}
+              {hueGuide && <Slider value={hueIntensity} min={0} max={1} step={0.01} onChange={setHueIntensity} onLiveChange={liveWriters.hueIntensity} label="Hue intensity" format={FMT_PCT_FROM_FRAC} t={t} />}
               <Toggle on={focusMode} onChange={v => { setFocusMode(v); if (!v) setFocusPara(-1); }} label="Focus Mode" icon={Focus} t={t} />
             </Section>
 

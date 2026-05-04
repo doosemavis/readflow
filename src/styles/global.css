@@ -166,9 +166,15 @@ button:active {
 /* FocusMode: cursor activated by CSS class, not re-render */
 .rf-focus-mode .rf-para { cursor: pointer; }
 
-/* HueGuide: color activated by CSS class, not re-render */
+/* HueGuide: color activated by CSS class, not re-render.
+   --rf-hue-intensity (0–1) blends inherited theme fg with the palette
+   color via color-mix. 0 = pure plain text, 1 = pure palette color.
+   currentColor in `color` resolves to the inherited value, so the
+   blend's "low" anchor is always whatever theme is active. */
 .rf-word { color: inherit; }
-.rf-hueguide .rf-word { color: var(--hue-color); }
+.rf-hueguide .rf-word {
+  color: color-mix(in oklab, currentColor, var(--hue-color) calc(var(--rf-hue-intensity, 1) * 100%));
+}
 
 /* NeuroDiv: bold activated by CSS class, not re-render */
 .rf-word strong { font-weight: inherit; }
