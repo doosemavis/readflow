@@ -27,7 +27,7 @@ function Avatar({ avatar, initial, accent, size = 28 }) {
   );
 }
 
-export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, onShowSubscription, onShowPaymentReceipts, showPaymentReceipts, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist }) {
+export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, onShowSubscription, onShowPaymentReceipts, showPaymentReceipts, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist, mockFreeMode, onToggleMockFreeMode }) {
   const { user, role, isOwner, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -64,11 +64,47 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
           {/* Profile header — not interactive */}
           <div style={{ padding: "12px 14px", borderBottom: `1px solid ${t.borderSoft}`, display: "flex", alignItems: "center", gap: 10 }}>
             <Avatar avatar={avatar} initial={initial} accent={t.accent} size={36} />
-            <div style={{ minWidth: 0 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: t.fg, fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
-              {role !== "user" && (
-                <span style={{ display: "inline-flex", alignItems: "center", marginTop: 3, padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 650, fontFamily: "'DM Sans', sans-serif", background: roleColor.bg, color: roleColor.text }}>{roleLabel}</span>
-              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
+                {role !== "user" && (
+                  <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 650, fontFamily: "'DM Sans', sans-serif", background: roleColor.bg, color: roleColor.text }}>{roleLabel}</span>
+                )}
+                {/* Owner-only Pro/Free view toggle for UI testing.
+                    Pinned to the far right of the row via margin-left: auto so
+                    it sits under the email's right edge regardless of role
+                    badge presence/length.
+                    Switch ON  = Pro view (admin bypass active)
+                    Switch OFF = Free view (admin bypass overridden) */}
+                {isOwner && onToggleMockFreeMode && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+                    <span style={{ fontSize: 10, fontWeight: 650, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif" }}>
+                      {mockFreeMode ? "Free view" : "Pro view"}
+                    </span>
+                    <Switch.Root
+                      checked={!mockFreeMode}
+                      onCheckedChange={(checked) => onToggleMockFreeMode(!checked)}
+                      onClick={e => e.stopPropagation()}
+                      className="rf-static"
+                      aria-label="Toggle Pro/Free view"
+                      style={{
+                        width: 36, height: 20, borderRadius: 10, padding: 2, flexShrink: 0,
+                        background: !mockFreeMode ? (t.switchOn ?? t.accent) : t.border,
+                        border: "none", cursor: "pointer",
+                        transition: "background 0.2s ease",
+                        display: "flex", alignItems: "center", outline: "none",
+                      }}
+                    >
+                      <Switch.Thumb style={{
+                        display: "block", width: 16, height: 16, borderRadius: 8,
+                        background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                        transition: "transform 0.2s cubic-bezier(0.4,0,0.2,1)",
+                        transform: !mockFreeMode ? "translateX(16px)" : "translateX(0)",
+                      }} />
+                    </Switch.Root>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

@@ -5,12 +5,34 @@ import { loadScript } from "./scriptLoader";
 //   item.transform  — affine matrix; transform[4] = x, transform[5] = y
 //   item.height     — font height in user units (≈ font size)
 //   item.width      — text width in user units
+//   item.fontName   — internal font ID (resolves via tc.styles[fontName])
 // Items aren't always in reading order, so we group by line (same y) and
 // sort within page before stitching.
 
-const TITLE_FONT_RATIO = 1.35;       // line is a title if median item height > median * this
-const PARAGRAPH_GAP_RATIO = 1.7;     // gap between lines that signals a paragraph break
-const SAME_LINE_Y_TOLERANCE = 1.5;   // items within this many user units share a line
+const TITLE_FONT_RATIO = 1.35;
+const PARAGRAPH_GAP_RATIO = 1.7;
+const SAME_LINE_Y_TOLERANCE = 1.5;
+const HEADER_FOOTER_THRESHOLD = 0.3;       // text on ≥30% of pages = running header/footer
+const MIN_PAGES_FOR_REPEAT_DETECTION = 2;  // even 2-page docs benefit from repeat-stripping
+const MIN_REPEAT_PAGES = 2;                // text must appear on ≥2 pages to be flagged
+const COL_HISTOGRAM_BIN = 10;              // pt per histogram bin for column detection
+const COL_MIN_PEAK_PCT = 0.10;             // a column-start peak must contain ≥10% of items
+const COL_MIN_GAP = 50;                    // peaks closer than this aren't separate columns
+const BANNER_WIDTH_RATIO = 1.5;            // item wider than column × this = page-spanning banner
+const BOLD_LINE_PCT = 0.6;                 // ≥60% of items bold → treat the whole line as bold
+const SUBHEAD_SIZE_RATIO = 1.01;           // bold line ≥1% larger than body counts as a sub-heading
+const SHORT_BOLD_MAX_WORDS = 12;           // body-size mostly-bold line ≤N words → also a sub-heading
+const SHORT_BOLD_MIN_RATIO = 0.7;          // …and ≥70% of its characters must be bold
+const INDENT_BULLET_MIN = 8;               // pt past body-baseline = bullet item
+const INDENT_BULLET_MAX = 80;              // beyond this it's probably a separate column, not a bullet
+const BASELINE_MIN_REPEATS = 3;            // a left-x must occur ≥N times to qualify as the body baseline
+
+// Bullet glyphs PDFs use for unordered list items. Pdf.js usually emits
+// the bullet as its own text item, so by the time the line is stitched
+// it appears as a leading character followed by the body text.
+const BULLET_GLYPH_RE = /^\s*([•·‣⁃◦▪▫■□○●◌◯◆◇★☆►▸▶❖✦✧♦])\s+/;
+const ASCII_BULLET_RE = /^\s*([*+])\s+/;
+const NUMBERED_LIST_RE = /^\s*(\d{1,3})[.)]\s+/;
 
 function median(nums) {
   if (!nums.length) return 0;
@@ -19,10 +41,160 @@ function median(nums) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-// Group raw pdf.js items into lines keyed by y-position. Items inside one
-// line are sorted left→right; lines themselves are sorted top→bottom.
+// ─────────────────────────────────────────────────────────────────────
+// Item enrichment — attaches isBold from font metadata
+// ─────────────────────────────────────────────────────────────────────
+
+// Identify bold/semibold runs by font family name. Most PDFs use
+// "Times-Bold", "Helvetica-Bold", "Arial,Bold" etc. Web-to-PDF tools
+// also use weight numbers like "OpenSans-700" or "Roboto-Medium".
+// We treat weight ≥ 500 as "bold enough" for sub-heading detection —
+// designers commonly use Medium/SemiBold for in-paragraph hierarchy.
+const BOLD_FONT_RE = /(\bbold\b|\bbd\b|\bheavy\b|\bblack\b|\b(500|600|700|800|900)\b|extrabold|ultrabold|extra-?bold|ultra-?bold|semibold|semi-?bold|demibold|demi-?bold|\bmedium\b)/i;
+// Italic / oblique. Folded into the same isBold flag downstream because
+// our renderer currently treats both as "emphasized" — keeping visual
+// distinction is more important than the bold-vs-italic semantic.
+const ITALIC_FONT_RE = /(italic|oblique|\bit\b)/i;
+
+function isEmphasisFont(fontFamily, fontName) {
+  return BOLD_FONT_RE.test(fontFamily) || BOLD_FONT_RE.test(fontName)
+      || ITALIC_FONT_RE.test(fontFamily) || ITALIC_FONT_RE.test(fontName);
+}
+
+// Transform matrix: [scaleX, skewY, skewX, scaleY, tx, ty]. PDFs that
+// fake italic by skewing upright glyphs leave a non-zero skewX (~0.2
+// for ~11° slant). True italic fonts have skewX≈0 — they slant via
+// glyph outlines instead.
+const ITALIC_SKEW_THRESHOLD = 0.05;
+
+function detectItemEmphasis(it, styles) {
+  const style = styles?.[it.fontName];
+  const fontFamily = style?.fontFamily || "";
+  const fontName = it.fontName || "";
+  const isBold = BOLD_FONT_RE.test(fontFamily) || BOLD_FONT_RE.test(fontName);
+  const skewX = Math.abs(it.transform?.[2] || 0);
+  const isItalic = ITALIC_FONT_RE.test(fontFamily) || ITALIC_FONT_RE.test(fontName) || skewX > ITALIC_SKEW_THRESHOLD;
+  return { isBold, isItalic };
+}
+
+function enrichItems(items, styles) {
+  return items.map(it => ({ ...it, ...detectItemEmphasis(it, styles) }));
+}
+
+// Document-wide font usage. PDFs that hide bold/italic in custom font
+// subsets (so the name doesn't contain "Bold"/"Italic") still expose
+// the variant as a *different* fontName. The font that owns the most
+// characters is the body face; minority fonts at body size are the
+// emphasis variants — mark their items as bold so they re-emphasize.
+function analyzeFontUsage(rawPageData) {
+  const fontChars = new Map();
+  for (const pd of rawPageData) {
+    for (const line of pd.lines) {
+      for (const it of line.items) {
+        if (!it.fontName) continue;
+        fontChars.set(it.fontName, (fontChars.get(it.fontName) || 0) + (it.str?.length || 0));
+      }
+    }
+  }
+  const sorted = [...fontChars.entries()].sort((a, b) => b[1] - a[1]);
+  return { primary: sorted[0]?.[0] || null, primaryCount: sorted[0]?.[1] || 0, all: fontChars };
+}
+
+function markMinorityFontsAsEmphasis(rawPageData, fontUsage) {
+  const { primary, primaryCount, all } = fontUsage;
+  if (!primary || primaryCount === 0) return;
+  const MINORITY_RATIO = 0.5; // a font used <50% as much as primary = emphasis variant
+  for (const pd of rawPageData) {
+    for (const line of pd.lines) {
+      for (const it of line.items) {
+        // Already classified by regex/skew — don't overwrite italic with bold.
+        if (it.isBold || it.isItalic) continue;
+        if (!it.fontName || it.fontName === primary) continue;
+        const usage = all.get(it.fontName) || 0;
+        if (usage / primaryCount < MINORITY_RATIO) it.isBold = true;
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Multi-column detection — histogram of left x-coords identifies the
+// start of each column. Page-spanning items (e.g. article headlines)
+// are detected by abnormal item width and emitted as a banner block
+// before column processing.
+// ─────────────────────────────────────────────────────────────────────
+
+function detectColumns(items, pageWidth) {
+  const meaningful = items.filter(it => it.str && it.str.trim().length >= 2);
+  if (meaningful.length < 12) return [{ start: 0, end: pageWidth }];
+
+  const bins = new Map();
+  for (const it of meaningful) {
+    const bin = Math.floor(it.transform[4] / COL_HISTOGRAM_BIN) * COL_HISTOGRAM_BIN;
+    bins.set(bin, (bins.get(bin) || 0) + 1);
+  }
+  const sorted = [...bins.entries()].sort((a, b) => a[0] - b[0]);
+  const minHeight = Math.max(3, meaningful.length * COL_MIN_PEAK_PCT);
+
+  const peaks = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const [x, count] = sorted[i];
+    if (count < minHeight) continue;
+    const prev = i > 0 ? sorted[i - 1][1] : 0;
+    const next = i < sorted.length - 1 ? sorted[i + 1][1] : 0;
+    if (count >= prev && count >= next) peaks.push(x);
+  }
+
+  // Collapse peaks that are too close to be different columns.
+  const cols = [];
+  for (const x of peaks) {
+    if (cols.length === 0 || x - cols[cols.length - 1] >= COL_MIN_GAP) cols.push(x);
+  }
+
+  if (cols.length <= 1) return [{ start: 0, end: pageWidth }];
+
+  return cols.map((c, i) => ({
+    start: c,
+    end: i + 1 < cols.length ? cols[i + 1] - 5 : pageWidth,
+  }));
+}
+
+// Sort items into per-column buckets + a banner bucket (page-spanning
+// items wider than a column × BANNER_WIDTH_RATIO go up top, processed
+// before any column).
+function bucketItemsByColumn(items, columns) {
+  if (columns.length <= 1) return { banner: [], columns: [items] };
+
+  const columnWidth = (columns[0].end - columns[0].start);
+  const bannerWidthThreshold = columnWidth * BANNER_WIDTH_RATIO;
+
+  const banner = [];
+  const buckets = columns.map(() => []);
+  for (const it of items) {
+    if ((it.width || 0) > bannerWidthThreshold) {
+      banner.push(it);
+      continue;
+    }
+    const cx = it.transform[4] + (it.width || 0) / 2;
+    let assigned = false;
+    for (let i = 0; i < columns.length; i++) {
+      if (cx >= columns[i].start && cx < columns[i].end) {
+        buckets[i].push(it);
+        assigned = true;
+        break;
+      }
+    }
+    if (!assigned) buckets[0].push(it); // fallback to leftmost
+  }
+  return { banner, columns: buckets };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Line grouping + stitching
+// ─────────────────────────────────────────────────────────────────────
+
 function groupIntoLines(items) {
-  const buckets = []; // { y, items }
+  const buckets = [];
   for (const item of items) {
     if (item.str === undefined) continue;
     const y = item.transform[5];
@@ -31,11 +203,10 @@ function groupIntoLines(items) {
     bucket.items.push(item);
   }
   for (const b of buckets) b.items.sort((a, c) => a.transform[4] - c.transform[4]);
-  buckets.sort((a, b) => b.y - a.y); // PDF y-coords increase upward
+  buckets.sort((a, b) => b.y - a.y);
   return buckets;
 }
 
-// Compute the typical vertical distance between consecutive lines.
 function medianLineGap(lines) {
   const gaps = [];
   for (let i = 1; i < lines.length; i++) {
@@ -45,18 +216,28 @@ function medianLineGap(lines) {
   return median(gaps);
 }
 
-// Stitch a line's text items, joining adjacent items with no space when
-// they touch and a single space otherwise (pdf.js sometimes emits one
-// glyph per item).
+// Compute the per-line "word break" gap threshold. PDFs that use char-
+// level positioning (each glyph a separate item with small kerning gaps)
+// would false-trigger our space insertion if the threshold is constant.
+// Scale the threshold to the line's font height so letter-spaced display
+// text (e.g. "N E W  Y O R K" with 1pt letter-spacing) doesn't get a
+// space inserted between every character.
+function wordBreakThreshold(line) {
+  const h = lineFontHeight(line);
+  return Math.max(0.5, h * 0.22); // ~22% of font height ≈ width of a normal space
+}
+
+// Plain text — no formatting markers. Used for title detection and
+// repeating-line dedup (so "**Title**" matches "Title").
 function lineText(line) {
+  const threshold = wordBreakThreshold(line);
   let out = "";
   let prev = null;
   for (const item of line.items) {
     if (prev) {
       const prevEnd = prev.transform[4] + (prev.width || 0);
       const gap = item.transform[4] - prevEnd;
-      // Heuristic: tiny gap → no separator, larger gap → single space.
-      if (gap > 0.5 && !out.endsWith(" ") && !item.str.startsWith(" ")) out += " ";
+      if (gap > threshold && !out.endsWith(" ") && !item.str.startsWith(" ")) out += " ";
     }
     out += item.str;
     prev = item;
@@ -64,10 +245,396 @@ function lineText(line) {
   return out.trim();
 }
 
-// Median font height of items in a line (proxy for "this line's font size").
+// Same as lineText but wraps consecutive bold items in **…** and
+// italic items in __…__ so the renderer can re-emphasize them. Bold
+// is the outer marker, italic the inner — toggle close in reverse
+// order to keep the nesting balanced (`**__text__**`).
+function lineTextWithBold(line) {
+  const threshold = wordBreakThreshold(line);
+  let out = "";
+  let inBold = false;
+  let inItalic = false;
+  let prev = null;
+  const closeIfDone = (item) => {
+    if (inItalic && !item.isItalic) { out += "__"; inItalic = false; }
+    if (inBold && !item.isBold) { out += "**"; inBold = false; }
+  };
+  const openIfNew = (item) => {
+    if (item.isBold && !inBold) { out += "**"; inBold = true; }
+    if (item.isItalic && !inItalic) { out += "__"; inItalic = true; }
+  };
+  for (const item of line.items) {
+    if (prev) {
+      const prevEnd = prev.transform[4] + (prev.width || 0);
+      const gap = item.transform[4] - prevEnd;
+      if (gap > threshold && !out.endsWith(" ") && !item.str.startsWith(" ")) {
+        closeIfDone(item);
+        out += " ";
+      }
+    }
+    closeIfDone(item);
+    openIfNew(item);
+    out += item.str;
+    prev = item;
+  }
+  if (inItalic) out += "__";
+  if (inBold) out += "**";
+  return out.trim();
+}
+
 function lineFontHeight(line) {
   return median(line.items.map(i => i.height || 0));
 }
+
+// X-coord of the leftmost text item on a line. Used for indent-based
+// bullet detection (PDFs that draw bullet glyphs as vector shapes
+// don't include them in the text stream — the only signal we get is
+// that the line starts indented from the body margin).
+function lineLeftX(line) {
+  let min = Infinity;
+  for (const it of line.items) {
+    const x = it.transform[4];
+    if (x < min) min = x;
+  }
+  return min === Infinity ? 0 : min;
+}
+
+// Per-page body left-margin. Picks the leftmost x-coord that ≥N lines
+// share — body text dominates the leftmost column, so the leftmost
+// frequent position is the baseline. Indented bullets, blockquotes,
+// or right-column text appear as separate, more-indented x positions.
+function pageBaselineX(lines) {
+  const counts = new Map();
+  for (const line of lines) {
+    const x = Math.round(lineLeftX(line));
+    counts.set(x, (counts.get(x) || 0) + 1);
+  }
+  const frequent = [...counts.entries()]
+    .filter(([, c]) => c >= BASELINE_MIN_REPEATS)
+    .sort((a, b) => a[0] - b[0]);
+  return frequent[0]?.[0] ?? null;
+}
+
+// Character-weighted bold ratio. Some PDFs split a single word into
+// per-glyph items; an item-count ratio underweights the actual bold
+// span when bold glyphs are individually emitted. Weighting by
+// character count gives the visual fraction of bold text on the line.
+function lineBoldRatio(line) {
+  let totalChars = 0;
+  let boldChars = 0;
+  for (const it of line.items) {
+    const len = (it.str || "").length;
+    totalChars += len;
+    if (it.isBold) boldChars += len;
+  }
+  return totalChars > 0 ? boldChars / totalChars : 0;
+}
+
+function isLikelyPageNumber(text) {
+  return /^(page\s+)?\d{1,4}(\s*[/-]\s*\d{1,4})?$/i.test(text.trim());
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Document-wide font tier analysis (improvement #2)
+// Build a font-size histogram weighted by character count to find the
+// document's body font, then derive heading thresholds from it.
+// ─────────────────────────────────────────────────────────────────────
+
+function analyzeDocumentFonts(pageData) {
+  const sizeChars = new Map();
+  for (const pd of pageData) {
+    for (const line of pd.lines) {
+      const size = Math.round(lineFontHeight(line) * 10) / 10; // 0.1 pt resolution
+      const chars = lineText(line).length;
+      sizeChars.set(size, (sizeChars.get(size) || 0) + chars);
+    }
+  }
+  const sorted = [...sizeChars.entries()].sort((a, b) => b[1] - a[1]);
+  const body = sorted[0]?.[0] || 12;
+  return { body, h1: body * 1.5, h2: body * 1.25, h3: body * 1.1 };
+}
+
+// Decide a line's role from its size + bold ratio against the document
+// font tiers. Used in the per-page fallback to upgrade subheadings into
+// detected titles.
+//
+// Word count (not item count) drives the "short bold line" check —
+// PDF.js may split a single word into per-glyph items, which would
+// otherwise inflate `line.items.length` and miss the sub-heading.
+function classifyLine(line, tiers) {
+  const size = lineFontHeight(line);
+  const boldRatio = lineBoldRatio(line);
+  const text = lineText(line);
+  const wordCount = text ? text.split(/\s+/).filter(Boolean).length : 0;
+
+  if (size >= tiers.h1 * 0.95) return "h1";
+  if (size >= tiers.h2 * 0.95) return "h2";
+  // Size alone is sufficient when the line is clearly larger than body
+  // (≈10%+ bump). Many PDFs export sub-headings as a different font
+  // family rather than a bold weight on the body font, so PDF.js's
+  // bold flag is unreliable — trust size when the gap is unambiguous.
+  if (size >= tiers.h3 * 0.95) return "h3";
+  // Smaller size bump but the bold flag was detected — still a heading.
+  if (size >= tiers.body * SUBHEAD_SIZE_RATIO && boldRatio >= BOLD_LINE_PCT) return "h3";
+  // Body-size but standalone & mostly-bold (e.g. "About Us" in a doc
+  // that DOES expose bold) — bounded word count avoids promoting
+  // paragraphs that just start with a bold word.
+  if (boldRatio >= SHORT_BOLD_MIN_RATIO && wordCount > 0 && wordCount <= SHORT_BOLD_MAX_WORDS) return "h3";
+  return "body";
+}
+
+// Convert a leading bullet glyph or numbered marker to markdown form so
+// the renderer can group consecutive list items into <ul>/<ol>. Leaves
+// the rest of the text — including any **bold** spans — intact.
+function normalizeListMarker(text) {
+  // Some PDFs wrap the bullet glyph itself in bold; unwrap before matching.
+  const unwrapped = text.replace(
+    /^\*\*\s*([•·‣⁃◦▪▫■□○●◌◯◆◇★☆►▸▶❖✦✧♦])\s*\*\*\s+/,
+    "$1 ",
+  );
+  if (BULLET_GLYPH_RE.test(unwrapped)) return unwrapped.replace(BULLET_GLYPH_RE, "- ");
+  if (ASCII_BULLET_RE.test(unwrapped)) return unwrapped.replace(ASCII_BULLET_RE, "- ");
+  const num = unwrapped.match(NUMBERED_LIST_RE);
+  if (num) return num[1] + ". " + unwrapped.slice(num[0].length);
+  return unwrapped;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Repeating-text detection — strips running headers/footers and page
+// numbers (improvement #3, retained from prior version)
+// ─────────────────────────────────────────────────────────────────────
+
+// Normalize trailing pagination ("foo 1/12" → "foo") and any leading
+// page index ("3/12 foo" → "foo") so per-page footer URLs that differ
+// only in their N/M suffix collapse to the same string for repeat detection.
+function normalizeChromeText(text) {
+  return text
+    .replace(/\s*\d{1,4}\s*\/\s*\d{1,4}\s*$/, "")
+    .replace(/^\s*\d{1,4}\s*\/\s*\d{1,4}\s+/, "")
+    .trim();
+}
+
+function detectRepeatingLines(pageData) {
+  if (pageData.length < MIN_PAGES_FOR_REPEAT_DETECTION) return new Set();
+  const counts = new Map();
+  const TOP_BOTTOM_N = 2;
+  for (const pd of pageData) {
+    if (pd.lines.length === 0) continue;
+    const sample = [...pd.lines.slice(0, TOP_BOTTOM_N), ...pd.lines.slice(-TOP_BOTTOM_N)];
+    for (const line of sample) {
+      const text = normalizeChromeText(lineText(line));
+      if (!text || text.length > 120) continue;
+      counts.set(text, (counts.get(text) || 0) + 1);
+    }
+  }
+  const threshold = Math.max(MIN_REPEAT_PAGES, Math.ceil(pageData.length * HEADER_FOOTER_THRESHOLD));
+  const repeating = new Set();
+  for (const [text, count] of counts.entries()) {
+    if (count >= threshold) repeating.add(text);
+  }
+  return repeating;
+}
+
+function stripPageChrome(lines, repeatingSet) {
+  return lines.filter((line, idx) => {
+    const text = lineText(line);
+    if (!text) return false;
+    if (repeatingSet.has(normalizeChromeText(text))) return false;
+    const isTopOrBottom = idx === 0 || idx === lines.length - 1;
+    if (isTopOrBottom && isLikelyPageNumber(text)) return false;
+    return true;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Hyphenation join (improvement #4)
+// ─────────────────────────────────────────────────────────────────────
+
+function joinHyphenated(text) {
+  return text.replace(/([a-zA-Z])-\n([a-z])/g, "$1$2");
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Page → content string. Inserts paragraph breaks based on line gap,
+// preserves bold via markdown markers, optionally upgrades font-tier
+// subheadings to inline ## markdown headings.
+// ─────────────────────────────────────────────────────────────────────
+
+// Visual wrap of a bullet's text continues with a lowercase letter
+// (because the wrap broke mid-sentence). A new bullet starts with an
+// uppercase letter, digit, or punctuation. This is the most reliable
+// signal we have because PDF.js doesn't see Lever's drawn bullet glyphs
+// — without it, the gap heuristic alone merges every bullet into one.
+function isContinuationStart(text) {
+  const stripped = text.replace(/^[*_]+/, "").trimStart();
+  return /^[a-z]/.test(stripped);
+}
+
+// Per-line size marker. Lines within ±3% of body height get no marker
+// (they render at the user's chosen body size). Anything outside that
+// dead zone gets a `{r:RATIO}` prefix so the renderer can apply
+// `font-size: calc(var(--rf-font-size) * RATIO)` and preserve the
+// original document's visual hierarchy across user font-size changes.
+function sizeRatioMarker(line, fontTiers) {
+  if (!fontTiers || !fontTiers.body) return "";
+  const h = lineFontHeight(line);
+  if (!h) return "";
+  const ratio = h / fontTiers.body;
+  if (ratio >= 0.97 && ratio <= 1.03) return "";
+  return `{r:${ratio.toFixed(2)}}`;
+}
+
+function buildPageContent(lines, startLine, pageMedianGap, fontTiers, baselineX) {
+  const parts = [];
+  // Holds the current bullet's accumulated text. Continuation lines
+  // (indented body lines starting lowercase) get appended to it instead
+  // of becoming new bullets, so a wrapped bullet renders as one <li>
+  // instead of N.
+  let bulletBuf = null;
+  const flushBullet = () => {
+    if (bulletBuf != null) { parts.push(bulletBuf); bulletBuf = null; }
+  };
+
+  for (let li = startLine; li < lines.length; li++) {
+    const line = lines[li];
+    const text = lineTextWithBold(line);
+    if (!text) continue;
+    const role = fontTiers ? classifyLine(line, fontTiers) : "body";
+    const indent = baselineX != null ? lineLeftX(line) - baselineX : 0;
+    const indented = baselineX != null && indent > INDENT_BULLET_MIN && indent < INDENT_BULLET_MAX;
+    const prev = li > 0 ? lines[li - 1] : null;
+    const gap = prev ? prev.y - line.y : 0;
+    const isParaBreak = pageMedianGap > 0 && gap > pageMedianGap * PARAGRAPH_GAP_RATIO;
+
+    // Continuation of the current bullet — only when the line starts
+    // mid-sentence (lowercase). Uppercase/punctuation/digit starts a
+    // new bullet so the next branch handles it.
+    if (bulletBuf != null && indented && role === "body" && !isParaBreak && isContinuationStart(text)) {
+      bulletBuf += " " + text;
+      continue;
+    }
+
+    flushBullet();
+
+    if (parts.length > 0) {
+      parts.push(isParaBreak || role !== "body" ? "\n\n" : "\n");
+    }
+
+    const stripMarkers = (s) => s.replace(/^(\*\*|__)+|(\*\*|__)+$/g, "");
+    const ratioMarker = sizeRatioMarker(line, fontTiers);
+    if (role === "h2") parts.push(ratioMarker + "## " + stripMarkers(text));
+    else if (role === "h3") parts.push(ratioMarker + "### " + stripMarkers(text));
+    else if (indented && role === "body") {
+      // Strip any glyph-emitted leading bullet, then re-emit as markdown
+      // so the renderer can group consecutive items into a single <ul>.
+      const cleaned = normalizeListMarker(text).replace(/^- /, "");
+      bulletBuf = ratioMarker + "- " + cleaned;
+    } else {
+      parts.push(ratioMarker + normalizeListMarker(text));
+    }
+  }
+  flushBullet();
+  return parts.join("").trim();
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// PDF outline → flat section list (improvement #1 + #5)
+// ─────────────────────────────────────────────────────────────────────
+
+function flattenOutline(items, depth = 0, out = []) {
+  if (!items) return out;
+  for (const item of items) {
+    out.push({ title: item.title?.trim() || "Untitled", dest: item.dest, depth });
+    if (item.items?.length) flattenOutline(item.items, depth + 1, out);
+  }
+  return out;
+}
+
+async function resolveDestToPage(doc, dest) {
+  try {
+    let resolved = dest;
+    if (typeof resolved === "string") resolved = await doc.getDestination(resolved);
+    if (Array.isArray(resolved) && resolved[0]) {
+      const pageIdx = await doc.getPageIndex(resolved[0]);
+      return pageIdx + 1;
+    }
+  } catch {}
+  return null;
+}
+
+async function buildOutlineSections(doc, outline, pageData, fontTiers) {
+  const flat = flattenOutline(outline);
+  if (flat.length === 0) return null;
+
+  const resolved = await Promise.all(
+    flat.map(async (entry) => ({ ...entry, page: await resolveDestToPage(doc, entry.dest) })),
+  );
+  const entries = resolved.filter(e => e.page !== null).sort((a, b) => a.page - b.page);
+  if (entries.length === 0) return null;
+
+  const sections = [];
+  for (let e = 0; e < entries.length; e++) {
+    const entry = entries[e];
+    const startPage = entry.page;
+    const endPage = e + 1 < entries.length ? entries[e + 1].page - 1 : pageData.length;
+
+    const contentParts = [];
+    for (let p = startPage; p <= endPage; p++) {
+      const pd = pageData[p - 1];
+      if (!pd) continue;
+
+      let startLine = 0;
+      const firstText = pd.lines[0] ? lineText(pd.lines[0]) : "";
+      if (p === startPage && firstText && firstText.toLowerCase() === entry.title.toLowerCase()) {
+        startLine = 1;
+      }
+      const baselineX = pageBaselineX(pd.lines);
+      const pageContent = buildPageContent(pd.lines, startLine, pd.medianGap, fontTiers, baselineX);
+      if (pageContent) contentParts.push(pageContent);
+    }
+
+    const content = joinHyphenated(contentParts.join("\n\n").trim());
+    if (content) sections.push({ type: "chapter", title: entry.title, number: e + 1, content });
+  }
+  return sections.length > 0 ? sections : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Per-page fallback (no outline available)
+// ─────────────────────────────────────────────────────────────────────
+
+function buildPerPageSections(pageData, fontTiers) {
+  const sections = [];
+  for (const pd of pageData) {
+    if (pd.lines.length === 0) continue;
+
+    let title = null;
+    let titleSizeRatio = null;
+    let bodyStartIdx = 0;
+    if (fontTiers) {
+      const role = classifyLine(pd.lines[0], fontTiers);
+      if (role === "h1" || role === "h2") {
+        title = lineText(pd.lines[0]);
+        titleSizeRatio = lineFontHeight(pd.lines[0]) / fontTiers.body;
+        bodyStartIdx = 1;
+      }
+    }
+    if (!title && pd.lines[bodyStartIdx]) {
+      const firstBody = lineText(pd.lines[bodyStartIdx]);
+      const m = firstBody.match(/^(chapter\s+[\divxlc]+[.:—\-\s]*.*|part\s+[\divxlc]+[.:—\-\s]*.*|section\s+[\divxlc]+[.:—\-\s]*.*)$/i);
+      if (m) { title = m[1].trim(); bodyStartIdx++; }
+    }
+
+    const baselineX = pageBaselineX(pd.lines);
+    const content = joinHyphenated(buildPageContent(pd.lines, bodyStartIdx, pd.medianGap, fontTiers, baselineX));
+    if (content || title) sections.push({ type: "page", title, titleSizeRatio, number: pd.pageNum, content });
+  }
+  return sections;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Main parse entry point
+// ─────────────────────────────────────────────────────────────────────
 
 export async function parsePDF(file) {
   await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
@@ -77,56 +644,78 @@ export async function parsePDF(file) {
 
   const buf = await file.arrayBuffer();
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-  const sections = [];
 
+  // ── Pre-scan all pages (with bold info + multi-column awareness) ──
+  const rawPageData = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale: 1 });
     const tc = await page.getTextContent();
-    const lines = groupIntoLines(tc.items).filter(line => lineText(line));
-    if (!lines.length) continue;
+    const items = enrichItems(tc.items, tc.styles);
 
-    const pageMedianFont = median(lines.map(lineFontHeight).filter(h => h > 0));
-    const pageMedianGap = medianLineGap(lines);
+    const columns = detectColumns(items, viewport.width);
+    const { banner, columns: columnBuckets } = bucketItemsByColumn(items, columns);
 
-    // First line that's noticeably larger than the page's body font is
-    // treated as the page title (catches "Frankenstein" or "Chapter 1"
-    // without needing the regex match below).
-    let title = null;
-    let bodyStartIdx = 0;
-    if (pageMedianFont > 0) {
-      const firstFont = lineFontHeight(lines[0]);
-      if (firstFont > pageMedianFont * TITLE_FONT_RATIO) {
-        title = lineText(lines[0]);
-        bodyStartIdx = 1;
-      }
-    }
+    // Banner first, then each column sequentially. Each chunk gets its
+    // own line grouping/sort so reading order matches the visual flow.
+    const bannerLines = groupIntoLines(banner).filter(l => lineText(l));
+    const columnLines = columnBuckets.flatMap(b => groupIntoLines(b).filter(l => lineText(l)));
+    const lines = [...bannerLines, ...columnLines];
 
-    // Fallback: regex against the first body line for chapter/part/section.
-    if (!title && lines[bodyStartIdx]) {
-      const firstBody = lineText(lines[bodyStartIdx]);
-      const m = firstBody.match(/^(chapter\s+[\divxlc]+[.:—\-\s]*.*|part\s+[\divxlc]+[.:—\-\s]*.*|section\s+[\divxlc]+[.:—\-\s]*.*)$/i);
-      if (m) { title = m[1].trim(); bodyStartIdx++; }
-    }
+    rawPageData.push({ pageNum: i, lines, medianGap: medianLineGap(lines) });
+  }
 
-    // Build content. Insert "\n\n" (paragraph break) when the vertical
-    // gap to the previous line is larger than ~1.7x the page's median
-    // line gap; otherwise "\n" (soft line break).
-    const parts = [];
-    for (let li = bodyStartIdx; li < lines.length; li++) {
-      const text = lineText(lines[li]);
-      if (!text) continue;
-      if (parts.length) {
-        const prev = lines[li - 1];
-        const gap = prev ? prev.y - lines[li].y : 0;
-        const isParaBreak = pageMedianGap > 0 && gap > pageMedianGap * PARAGRAPH_GAP_RATIO;
-        parts.push(isParaBreak ? "\n\n" : "\n");
-      }
-      parts.push(text);
-    }
-    const content = parts.join("").trim();
-    if (content || title) {
-      sections.push({ type: "page", title, number: i, content });
+  // ── Document-wide font usage; mark minority-font items as bold ──
+  // Runs before chrome-stripping so the analysis sees every item the
+  // PDF emitted (including footers we'll discard for content).
+  const fontUsage = analyzeFontUsage(rawPageData);
+  markMinorityFontsAsEmphasis(rawPageData, fontUsage);
+
+  // ── Strip running headers/footers + page numbers ──
+  const repeatingSet = detectRepeatingLines(rawPageData);
+  const pageData = rawPageData.map(pd => ({
+    ...pd,
+    lines: stripPageChrome(pd.lines, repeatingSet),
+  }));
+
+  // ── Document-wide font tiers (used by both outline + fallback paths) ──
+  const fontTiers = analyzeDocumentFonts(pageData);
+
+  // ── Optional per-line diagnostics (set localStorage 'rf-pdf-debug'='1') ──
+  if (typeof window !== "undefined" && window.localStorage?.getItem("rf-pdf-debug") === "1") {
+    // eslint-disable-next-line no-console
+    console.log("[rf-pdf] tiers", fontTiers, "primary font:", fontUsage.primary);
+    // eslint-disable-next-line no-console
+    console.log("[rf-pdf] font usage", Object.fromEntries(fontUsage.all));
+    for (const pd of pageData) {
+      const baselineX = pageBaselineX(pd.lines);
+      const rows = pd.lines.map(line => {
+        const x = lineLeftX(line);
+        return {
+          page: pd.pageNum,
+          size: +lineFontHeight(line).toFixed(2),
+          vsBody: +(lineFontHeight(line) / fontTiers.body).toFixed(2),
+          bold: +lineBoldRatio(line).toFixed(2),
+          x: +x.toFixed(0),
+          indent: baselineX != null ? +(x - baselineX).toFixed(0) : null,
+          role: classifyLine(line, fontTiers),
+          text: lineText(line).slice(0, 80),
+        };
+      });
+      // eslint-disable-next-line no-console
+      console.log(`[rf-pdf] page ${pd.pageNum} baselineX=${baselineX}`);
+      // eslint-disable-next-line no-console
+      console.table(rows);
     }
   }
-  return sections;
+
+  // ── Prefer the PDF outline when present ──
+  let outline = null;
+  try { outline = await doc.getOutline(); } catch {}
+  if (outline && outline.length > 0) {
+    const outlineSections = await buildOutlineSections(doc, outline, pageData, fontTiers);
+    if (outlineSections) return outlineSections;
+  }
+
+  return buildPerPageSections(pageData, fontTiers);
 }

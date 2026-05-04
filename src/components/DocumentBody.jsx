@@ -1,21 +1,71 @@
 import { memo, useMemo, useCallback } from "react";
 import { PALETTES } from "../config/constants";
 
-const renderWord = (word, wi, total, huePalette, neuroDivIntensity) => {
+// Split a line into segments by markdown-style **bold** and __italic__
+// markers. State-machine pass — each marker toggles its flag and emits
+// a new segment with the current flag state, so nested markers
+// (`**__bold-italic__**`) are handled correctly.
+function splitEmphasis(line) {
+  const segments = [];
+  let bold = false;
+  let italic = false;
+  let buf = "";
+  let i = 0;
+  const flush = () => {
+    if (buf) segments.push({ text: buf, bold, italic });
+    buf = "";
+  };
+  while (i < line.length) {
+    if (line[i] === "*" && line[i + 1] === "*") {
+      flush();
+      bold = !bold;
+      i += 2;
+    } else if (line[i] === "_" && line[i + 1] === "_") {
+      flush();
+      italic = !italic;
+      i += 2;
+    } else {
+      buf += line[i];
+      i += 1;
+    }
+  }
+  flush();
+  return segments;
+}
+
+// Flatten a line into a token stream of { text, bold, italic } words,
+// preserving per-word emphasis so the renderer can re-emphasize whole
+// words instead of splitting markup across NeuroDiv anchors.
+function lineToWords(line) {
+  const segments = splitEmphasis(line);
+  const words = [];
+  for (const seg of segments) {
+    for (const w of seg.text.split(/\s+/).filter(Boolean)) {
+      words.push({ text: w, bold: seg.bold, italic: seg.italic });
+    }
+  }
+  return words;
+}
+
+const renderWord = (word, wi, total, huePalette, neuroDivIntensity, isBold = false, isItalic = false) => {
   const colors = PALETTES[huePalette].colors;
   const cIdx = total > 1 ? Math.floor((wi / (total - 1)) * (colors.length - 1)) : 0;
   const color = colors[Math.min(cIdx, colors.length - 1)];
   const bl = Math.max(1, Math.round(word.length * neuroDivIntensity));
+  // Bold/italic apply on the wrapping span and inherit through the
+  // NeuroDiv first-portion <strong> anchor inside.
   return (
-    <span key={wi} className="rf-word" style={{ "--hue-color": color }}>
+    <span key={wi} className="rf-word" style={{
+      "--hue-color": color,
+      fontWeight: isBold ? 700 : "inherit",
+      fontStyle: isItalic ? "italic" : "inherit",
+    }}>
       <strong>{word.slice(0, bl)}</strong>{word.slice(bl)}{" "}
     </span>
   );
 };
 
 // Typography-driven dimensions read entirely from CSS custom properties set on the wrapper via ref.
-// Every var() includes a fallback so a transient unset state (between mount and first ref-write)
-// still renders correctly — important because calc() with an unresolved var has no implicit fallback.
 const PARA_STYLE = { marginBottom: "calc(var(--rf-line-height, 1.8) * 0.7em)" };
 const LINE_STYLE = { margin: "0 0 0.25em 0" };
 const DIVIDER_BAR_STYLE = { margin: "calc(var(--rf-line-height, 1.8) * 1.5em) 0", display: "flex", alignItems: "center", gap: 16 };
@@ -25,13 +75,118 @@ const TITLE_WRAP_STYLE = { marginBottom: "calc(var(--rf-line-height, 1.8) * 0.8e
 const TYPE_LABEL_STYLE = { fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.06em", textTransform: "uppercase" };
 const INNER_STYLE = { textAlign: "var(--rf-text-align, left)" };
 
+// Sub-heading styles emitted for `## …` and `### …` lines (parsers add
+// these markers when they detect mid-section font-tier headings).
+const H2_INLINE_STYLE = {
+  fontSize: "calc(var(--rf-font-size, 18px) * 1.3)",
+  fontWeight: 740,
+  margin: "calc(var(--rf-line-height, 1.8) * 0.8em) 0 calc(var(--rf-line-height, 1.8) * 0.35em)",
+  lineHeight: 1.25,
+  letterSpacing: "-0.01em",
+};
+const H3_INLINE_STYLE = {
+  fontSize: "calc(var(--rf-font-size, 18px) * 1.12)",
+  fontWeight: 700,
+  margin: "calc(var(--rf-line-height, 1.8) * 0.6em) 0 calc(var(--rf-line-height, 1.8) * 0.25em)",
+  lineHeight: 1.3,
+};
+
+// Per-line size ratio marker (`{r:1.45}`) emitted by the PDF parser.
+// Captures original-document font-size relative to body so the renderer
+// can preserve visual hierarchy across user font-size changes.
+const RATIO_RE = /^\{r:([\d.]+)\}/;
+function extractRatio(line) {
+  const m = RATIO_RE.exec(line);
+  if (!m) return { ratio: null, rest: line };
+  const ratio = parseFloat(m[1]);
+  return { ratio: Number.isFinite(ratio) && ratio > 0 ? ratio : null, rest: line.slice(m[0].length) };
+}
+function ratioFontSize(ratio) {
+  return `calc(var(--rf-font-size, 18px) * ${ratio})`;
+}
+
+const UL_STYLE = {
+  margin: "calc(var(--rf-line-height, 1.8) * 0.35em) 0",
+  paddingLeft: "1.6em",
+  listStyleType: "disc",
+};
+const OL_STYLE = {
+  margin: "calc(var(--rf-line-height, 1.8) * 0.35em) 0",
+  paddingLeft: "1.6em",
+  listStyleType: "decimal",
+};
+const LI_STYLE = { margin: "0 0 0.25em 0" };
+
+// Group consecutive markdown bullet (`- …`) and numbered (`1. …`) lines
+// into list blocks so the renderer can emit a single <ul>/<ol> with one
+// <li> per item. Plain text lines pass through as `line` blocks. The
+// optional leading `{r:RATIO}` marker is peeled off here so each item
+// carries its own size ratio for the renderer to apply.
+function groupListBlocks(lines) {
+  const blocks = [];
+  for (const line of lines) {
+    const { ratio, rest } = extractRatio(line);
+    const bullet = /^- (.+)/.exec(rest);
+    const numbered = /^(\d{1,3})\. (.+)/.exec(rest);
+    const last = blocks[blocks.length - 1];
+    if (bullet) {
+      const item = { text: bullet[1], ratio };
+      if (last && last.kind === "ul") last.items.push(item);
+      else blocks.push({ kind: "ul", items: [item] });
+    } else if (numbered) {
+      const item = { text: numbered[2], ratio };
+      if (last && last.kind === "ol") last.items.push(item);
+      else blocks.push({ kind: "ol", items: [item], start: parseInt(numbered[1], 10) });
+    } else {
+      blocks.push({ kind: "line", text: line });
+    }
+  }
+  return blocks;
+}
+
 const Paragraph = memo(function Paragraph({ para, idx, huePalette, neuroDivIntensity, onMouseEnter }) {
   const lines = para.split("\n").filter(l => l.trim());
+  const blocks = groupListBlocks(lines);
   return (
     <div className="rf-para" data-idx={idx} onMouseEnter={() => onMouseEnter(idx)} style={PARA_STYLE}>
-      {lines.map((line, li) => {
-        const words = line.split(/\s+/).filter(Boolean);
-        return <p key={li} style={LINE_STYLE}>{words.map((w, wi) => renderWord(w, wi, words.length, huePalette, neuroDivIntensity))}</p>;
+      {blocks.map((block, bi) => {
+        if (block.kind === "ul" || block.kind === "ol") {
+          const ListTag = block.kind;
+          const listStyle = block.kind === "ul" ? UL_STYLE : OL_STYLE;
+          return (
+            <ListTag key={bi} style={listStyle} start={block.start}>
+              {block.items.map((item, ii) => {
+                const words = lineToWords(item.text);
+                const liStyle = item.ratio
+                  ? { ...LI_STYLE, fontSize: ratioFontSize(item.ratio) }
+                  : LI_STYLE;
+                return (
+                  <li key={ii} style={liStyle}>
+                    {words.map((w, wi) => renderWord(w.text, wi, words.length, huePalette, neuroDivIntensity, w.bold, w.italic))}
+                  </li>
+                );
+              })}
+            </ListTag>
+          );
+        }
+        // Extract per-line ratio first, then detect inline headings (## / ###).
+        // Heading default fontSize gets overridden when an explicit ratio is
+        // present, so the original document hierarchy survives font-size
+        // changes in the user panel.
+        const { ratio, rest } = extractRatio(block.text);
+        let El = "p";
+        let style = LINE_STYLE;
+        let body = rest;
+        if (rest.startsWith("### ")) { El = "h3"; style = H3_INLINE_STYLE; body = rest.slice(4); }
+        else if (rest.startsWith("## ")) { El = "h2"; style = H2_INLINE_STYLE; body = rest.slice(3); }
+        if (ratio != null) style = { ...style, fontSize: ratioFontSize(ratio) };
+
+        const words = lineToWords(body);
+        return (
+          <El key={bi} style={style}>
+            {words.map((w, wi) => renderWord(w.text, wi, words.length, huePalette, neuroDivIntensity, w.bold, w.italic))}
+          </El>
+        );
       })}
     </div>
   );
@@ -42,7 +197,11 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
   const paras = useMemo(() => section.content.split(/\n\s*\n/).filter(p => p.trim()), [section.content]);
   const isPage = section.type === "page";
   const typeLabel = isPage ? `Page ${section.number}` : null;
-  const titleScale = isPage ? 1.4 : 1.5;
+  // Prefer the original document's measured ratio so a 2.25× h1 stays
+  // 2.25× whatever body size the user picks. Fall back to the default
+  // page/chapter scale when the parser couldn't measure (e.g. outline-
+  // derived chapter titles that don't correspond to a single line).
+  const titleScale = section.titleSizeRatio ?? (isPage ? 1.4 : 1.5);
 
   return (
     <div ref={refCallback} className="rf-section">
@@ -87,16 +246,12 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
 const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections, wrapperRef, featureClassRef, settings, focusModeRef, setFocusPara, sectionRefs }) {
   const { huePalette, neuroDivIntensity, t } = settings;
 
-  // focusModeRef is owned by App and kept fresh there — read at hover time so the callback
-  // stays stable and memoized Paragraphs never re-render when Focus toggles.
   const onParaMouseEnter = useCallback((idx) => {
     if (focusModeRef.current) setFocusPara(idx);
   }, [focusModeRef, setFocusPara]);
 
   const paragraphs = useMemo(() => text.split(/\n\s*\n/).filter(p => p.trim()), [text]);
 
-  // Stable per-section ref callbacks — avoids creating fresh inline refs each render
-  // that would otherwise force ref churn on memoized Sections.
   const sectionRefCallbacks = useMemo(() => {
     if (!docSections) return [];
     return docSections.map((_, si) => (el) => {
@@ -104,9 +259,6 @@ const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections
     });
   }, [docSections, sectionRefs]);
 
-  // Wrapper consumes typography exclusively via CSS custom properties written by the parent (App)
-  // directly to wrapperRef.current.style — no typography props live in this subtree's render path.
-  // Fallbacks match initial App state so the first paint (before rAF fires) still looks correct.
   const wrapperStyle = useMemo(() => ({
     width: "var(--rf-column-width, 95%)",
     margin: "0 auto",
@@ -121,7 +273,6 @@ const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections
     boxSizing: "border-box",
   }), [t.fg]);
 
-  // Inner div's className is written by App via featureClassRef (no React reconciliation on toggle).
   return (
     <div ref={wrapperRef} className="rf-doc-wrapper" style={wrapperStyle}>
       <div ref={featureClassRef} style={INNER_STYLE}>

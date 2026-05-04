@@ -194,7 +194,9 @@ export default function SubscriptionModal({ open, onOpenChange, sub, onShowPrici
               </div>
               {!sub.hasStripeHistory ? (
                 <div style={{ padding: 14, borderRadius: 12, background: t.surface, fontSize: 13, color: t.fgSoft, lineHeight: 1.55 }}>
-                  Admin bypass is active — there's no real Stripe subscription to manage.{" "}
+                  Admin bypass is{" "}
+                  <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 999, background: "#10B98118", color: "#10B981", border: "1px solid #10B98144", fontSize: 11, fontWeight: 700, fontFamily: "'DM Sans', sans-serif" }}>active</span>
+                  {" "}— there's no real Stripe subscription to manage.{" "}
                   <a
                     href="#start-test-subscription"
                     onClick={(e) => { e.preventDefault(); onOpenChange(false); onShowPricing(); }}
