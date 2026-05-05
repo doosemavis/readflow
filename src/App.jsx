@@ -85,7 +85,6 @@ const PricingModal         = lazy(() => import("./components/PricingModal"));
 const PaywallModal         = lazy(() => import("./components/PaywallModal"));
 const CheckoutModal        = lazy(() => import("./components/CheckoutModal"));
 const AuthModal            = lazy(() => import("./components/AuthModal"));
-const AdminPanel           = lazy(() => import("./components/AdminPanel"));
 const AvatarSettingsModal  = lazy(() => import("./components/AvatarSettingsModal"));
 const SubscriptionModal    = lazy(() => import("./components/SubscriptionModal"));
 const DeleteAccountModal   = lazy(() => import("./components/DeleteAccountModal"));
@@ -136,7 +135,6 @@ export default function App() {
   useEffect(() => {
     if (isRecovering) setShowAuth(true);
   }, [isRecovering]);
-  const [showAdmin, setShowAdmin] = useState(false);
   const [showAvatarSettings, setShowAvatarSettings] = useState(false);
   const [showSubscription, setShowSubscription] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -485,7 +483,6 @@ export default function App() {
       {showCheckout && <CheckoutModal billing={checkoutBilling} onClose={() => setShowCheckout(false)} t={t} />}
       {showPaywall && <PaywallModal uploadsUsed={sub.uploadsUsed} onUpgrade={() => { setShowPaywall(false); setShowPricing(true); }} onClose={() => setShowPaywall(false)} t={t} />}
       {showAuth && <AuthModal onClose={() => { setShowAuth(false); clearRecovery?.(); }} t={t} initialView={isRecovering ? "setPassword" : "login"} />}
-      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} t={t} />}
       {/* AvatarSettingsModal stays mounted so Radix Dialog can run its proper
           open→close lifecycle. Force-unmounting via `{show && ...}` (the pattern
           we use for the others) leaks body styles like pointer-events:none on
@@ -515,7 +512,7 @@ export default function App() {
       {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
       {modals}
       <div style={{ position: "fixed", top: 14, right: 16, zIndex: 100 }}>
-        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} mockFreeMode={sub.mockFreeMode} onToggleMockFreeMode={sub.toggleMockFreeMode} />
+        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} mockFreeMode={sub.mockFreeMode} onToggleMockFreeMode={sub.toggleMockFreeMode} />
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 520 }}>
@@ -833,7 +830,7 @@ export default function App() {
               </Tip>
             ))}
           </div>
-          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAdmin={() => setShowAdmin(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} mockFreeMode={sub.mockFreeMode} onToggleMockFreeMode={sub.toggleMockFreeMode} />
+          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} mockFreeMode={sub.mockFreeMode} onToggleMockFreeMode={sub.toggleMockFreeMode} />
         </div>
 
         {/* Reader scroll area */}

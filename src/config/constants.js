@@ -59,6 +59,18 @@ export const FREE_UPLOAD_LIMIT = 3;
 export const TRIAL_DAYS = 14;
 export const MAX_RECENT_DOCS = 5;
 
+// Supabase plan caps for the AdminPanel capacity widgets. Bump together
+// when promoting Free → Pro (1 GB → 100 GB storage; 500 MB → 8 GB DB).
+//
+// Storage:  Free 1 * 1024**3 = 1073741824
+//           Pro  100 * 1024**3 = 107374182400
+// Database: Free 500 * 1024**2 = 524288000
+//           Pro  8 * 1024**3 = 8589934592
+export const SUPABASE_STORAGE_LIMIT_BYTES = 1 * 1024 * 1024 * 1024;
+export const SUPABASE_STORAGE_PLAN_LABEL = "Free (1 GB)";
+export const SUPABASE_DB_LIMIT_BYTES = 500 * 1024 * 1024;
+export const SUPABASE_DB_PLAN_LABEL = "Free (500 MB)";
+
 // Pro tier pricing. Single source of truth — used by PricingModal,
 // SubscriptionModal, and any future Stripe Price ID mapping in Phase 9.
 // `effectiveMonthly` is just for the marketing string ("billed annually").

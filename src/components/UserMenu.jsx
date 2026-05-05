@@ -27,7 +27,7 @@ function Avatar({ avatar, initial, accent, size = 28 }) {
   );
 }
 
-export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSettings, onShowSubscription, onShowPaymentReceipts, showPaymentReceipts, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist, mockFreeMode, onToggleMockFreeMode }) {
+export default function UserMenu({ t, onShowAuth, onShowAvatarSettings, onShowSubscription, onShowPaymentReceipts, showPaymentReceipts, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist, mockFreeMode, onToggleMockFreeMode }) {
   const { user, role, isOwner, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -166,7 +166,7 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
                 )}
                 {(role === "admin" || isOwner) && (
                   <DropdownMenu.Item
-                    onSelect={onShowAdmin}
+                    onSelect={() => navigate("/admin")}
                     onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                     style={{ padding: "10px 12px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, outline: "none", userSelect: "none" }}
@@ -176,7 +176,7 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
                 )}
                 {(role === "admin" || isOwner) && (
                   <DropdownMenu.Item
-                    onSelect={() => navigate("/admin/roadmap")}
+                    onSelect={() => navigate("/admin?tab=roadmap")}
                     onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                     style={{ padding: "10px 12px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, outline: "none", userSelect: "none" }}

@@ -1,15 +1,27 @@
-import { useState, useEffect, useCallback } from "react";
-import { X, RefreshCw, Users, Gift, BarChart3, Crown, Trash2, AlertCircle, ChevronDown, Check } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  ArrowLeft, BookOpen, RefreshCw, Users, Gift, BarChart3, Crown, Trash2,
+  AlertCircle, ChevronDown, Check, Map,
+} from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { supabase } from "../utils/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
-import * as Dialog from "@radix-ui/react-dialog";
-import * as ScrollArea from "@radix-ui/react-scroll-area";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import CatLoader from "./CatLoader";
-import { useToast } from "./Toast";
+import {
+  THEMES,
+  SUPABASE_STORAGE_LIMIT_BYTES, SUPABASE_STORAGE_PLAN_LABEL,
+  SUPABASE_DB_LIMIT_BYTES, SUPABASE_DB_PLAN_LABEL,
+} from "../config/constants";
+import { storageGet } from "../utils/storage";
+import { useToast } from "../components/Toast";
+import CatLoader from "../components/CatLoader";
+import Footer from "../components/Footer";
+import { DiaTextReveal } from "../components/DiaTextReveal";
+import { getRevealColors } from "../config/themeColors";
+import RoadmapTab from "./admin/RoadmapTab";
 
-const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1000 };
+const LINK_RESET = { color: "inherit", textDecoration: "none" };
 const ROLE_OPTIONS = Object.entries(ROLES).map(([value, { label }]) => ({ value, label }));
 
 function formatDate(d) {
@@ -25,6 +37,27 @@ function StatCard({ label, value, sub, t }) {
       {sub && <div style={{ fontSize: 11, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", marginTop: 4 }}>{sub}</div>}
     </div>
   );
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes < 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  let n = bytes;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+}
+
+function formatRelative(iso) {
+  if (!iso) return "never";
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "just now";
+  const m = Math.floor(diff / 60_000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -227,6 +260,84 @@ function GrantProTab({ t }) {
 // ─────────────────────────────────────────────────────────────────────────
 // Tab: Analytics (owner only)
 // ─────────────────────────────────────────────────────────────────────────
+function CapacityWidget({ title, planLabel, usedBytes, limitBytes, t }) {
+  const used = Math.max(0, usedBytes || 0);
+  const limit = Math.max(1, limitBytes || 1);
+  const pct = Math.min(100, (used / limit) * 100);
+  const remaining = Math.max(0, limit - used);
+
+  // Capacity tiers — drives bar color + bottom pill. Thresholds chosen so
+  // "Medium" gives ~weeks of runway to plan an upgrade before "High" hits.
+  const capacity = pct >= 85
+    ? { label: "High",   color: "#E25C5C", hint: "Approaching cap — upgrade to avoid bottleneck." }
+    : pct >= 60
+    ? { label: "Medium", color: "#F5A524", hint: "Plan an upgrade soon." }
+    : { label: "Low",    color: "#3FB667", hint: "Plenty of headroom." };
+
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, gap: 8, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "'DM Sans', sans-serif" }}>
+          {title} · {planLabel}
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 700, color: t.fg, fontFamily: "'DM Sans', sans-serif" }}>{pct.toFixed(1)}%</span>
+      </div>
+
+      <div role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label={`Storage used: ${pct.toFixed(1)}%`} style={{ height: 10, borderRadius: 999, background: t.borderSoft, overflow: "hidden", marginBottom: 8 }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: capacity.color, transition: "width 200ms ease-out" }} />
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", marginBottom: 10 }}>
+        <span><strong style={{ color: t.fg }}>{formatBytes(used)}</strong> used of {formatBytes(limit)}</span>
+        <span>{formatBytes(remaining)} free</span>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 10, borderTop: `1px solid ${t.borderSoft}` }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "'DM Sans', sans-serif" }}>Capacity</span>
+        <span
+          aria-label={`Capacity: ${capacity.label}`}
+          style={{
+            padding: "3px 10px",
+            borderRadius: 999,
+            background: capacity.color,
+            color: "#fff",
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            fontFamily: "'DM Sans', sans-serif",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25)",
+          }}
+        >
+          {capacity.label}
+        </span>
+        <span style={{ fontSize: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif" }}>
+          {capacity.hint}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PillRow({ label, entries, t, empty }) {
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "'DM Sans', sans-serif", marginBottom: 8 }}>{label}</div>
+      {entries.length === 0 ? (
+        <div style={{ fontSize: 13, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif" }}>{empty}</div>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {entries.map(([k, v]) => (
+            <span key={k} style={{ padding: "4px 10px", borderRadius: 999, background: t.accentSoft, color: t.accent, fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>
+              {k}: {v}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnalyticsTab({ t }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -235,21 +346,33 @@ function AnalyticsTab({ t }) {
   const refresh = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const [users, subs, mrr, conv, dels] = await Promise.all([
+      const [users, subs, mrr, conv, dels, docs, docTypes, storage, sweeps, cycles, db] = await Promise.all([
         supabase.rpc("analytics_user_counts"),
         supabase.rpc("analytics_subscription_status"),
         supabase.rpc("analytics_mrr_cents"),
         supabase.rpc("analytics_trial_conversion_30d"),
         supabase.rpc("analytics_deletion_volume"),
+        supabase.rpc("analytics_doc_counts"),
+        supabase.rpc("analytics_doc_types"),
+        supabase.rpc("analytics_storage_bytes"),
+        supabase.rpc("analytics_ttl_sweeps"),
+        supabase.rpc("analytics_subscription_billing_cycle"),
+        supabase.rpc("analytics_database_bytes"),
       ]);
-      const firstErr = [users, subs, mrr, conv, dels].find(r => r.error);
+      const firstErr = [users, subs, mrr, conv, dels, docs, docTypes, storage, sweeps, cycles, db].find(r => r.error);
       if (firstErr) throw new Error(firstErr.error.message);
       setData({
         users: users.data,
         subs: subs.data ?? {},
+        cycles: cycles.data ?? {},
         mrrCents: mrr.data ?? 0,
         conv: conv.data,
         dels: dels.data,
+        docs: docs.data,
+        docTypes: docTypes.data ?? {},
+        storage: storage.data,
+        sweeps: sweeps.data,
+        db: db.data,
       });
     } catch (e) {
       setErr(e.message);
@@ -267,6 +390,10 @@ function AnalyticsTab({ t }) {
   const mrrUsd = (data.mrrCents / 100).toFixed(2);
   const arrUsd = (data.mrrCents * 12 / 100).toFixed(2);
   const subEntries = Object.entries(data.subs);
+  const payingSubs = (data.subs.active ?? 0) + (data.subs.past_due ?? 0);
+  const trialingSubs = data.subs.trialing ?? 0;
+  const cycleEntries = Object.entries(data.cycles);
+  const docTypeEntries = Object.entries(data.docTypes).sort((a, b) => b[1] - a[1]);
 
   return (
     <div style={{ padding: "16px 20px" }}>
@@ -275,122 +402,202 @@ function AnalyticsTab({ t }) {
         <button onClick={refresh} aria-label="Refresh" style={{ background: "transparent", border: "none", cursor: "pointer", color: t.icon, padding: "4px 8px", borderRadius: 6 }}><RefreshCw size={14} /></button>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
         <StatCard label="Total users" value={data.users?.total ?? 0} sub={`+${data.users?.last_7d ?? 0} last 7d`} t={t} />
-        <StatCard label="MRR" value={`$${mrrUsd}`} sub={`ARR ≈ $${arrUsd}`} t={t} />
+        <StatCard label="New users (30d)" value={data.users?.last_30d ?? 0} sub={`${data.users?.today ?? 0} today`} t={t} />
+        <StatCard label="Monthly Recurring Revenue (MRR)" value={`$${mrrUsd}`} sub={`ARR ≈ $${arrUsd}`} t={t} />
+        <StatCard label="Active paying subs" value={payingSubs} sub={`${trialingSubs} trialing`} t={t} />
         <StatCard label="Trial → paid" value={`${data.conv?.rate ?? 0}%`} sub={`${data.conv?.conversions ?? 0} of ${data.conv?.trials ?? 0} (30d)`} t={t} />
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+        <StatCard label="Docs stored" value={data.docs?.total ?? 0} sub={`${data.docs?.avg_per_user ?? 0} avg / user`} t={t} />
+        <StatCard label="Docs uploaded (30d)" value={data.docs?.last_30d ?? 0} sub={`${data.docs?.last_7d ?? 0} last 7d`} t={t} />
+        <StatCard label="Storage used" value={formatBytes(data.storage?.total_bytes)} sub={`${data.storage?.object_count ?? 0} objects`} t={t} />
+        <StatCard label="TTL deleted (30d)" value={data.sweeps?.deleted_30d ?? 0} sub={`${data.sweeps?.deleted_7d ?? 0} last 7d`} t={t} />
         <StatCard label="Pending deletions" value={data.dels?.pending ?? 0} sub={`${data.dels?.completed_last_30d ?? 0} completed (30d)`} t={t} />
       </div>
 
-      <div style={{ padding: "14px 16px", borderRadius: 12, background: t.surface, border: `1px solid ${t.borderSoft}` }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "'DM Sans', sans-serif", marginBottom: 10 }}>Subscriptions by status</div>
-        {subEntries.length === 0 ? (
-          <div style={{ fontSize: 13, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif" }}>No subscriptions yet.</div>
-        ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {subEntries.map(([status, count]) => (
-              <span key={status} style={{ padding: "4px 10px", borderRadius: 999, background: t.accentSoft, color: t.accent, fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>
-                {status}: {count}
-              </span>
-            ))}
-          </div>
-        )}
+      <CapacityWidget
+        title="Storage plan"
+        planLabel={SUPABASE_STORAGE_PLAN_LABEL}
+        usedBytes={data.storage?.total_bytes ?? 0}
+        limitBytes={SUPABASE_STORAGE_LIMIT_BYTES}
+        t={t}
+      />
+
+      <CapacityWidget
+        title="Database plan"
+        planLabel={SUPABASE_DB_PLAN_LABEL}
+        usedBytes={data.db?.total_bytes ?? 0}
+        limitBytes={SUPABASE_DB_LIMIT_BYTES}
+        t={t}
+      />
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "14px 16px", borderRadius: 12, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 12 }}>
+        <PillRow label="Subscriptions by status" entries={subEntries} t={t} empty="No subscriptions yet." />
+        <PillRow label="Subscriptions by billing cycle" entries={cycleEntries} t={t} empty="No paying subscribers yet." />
       </div>
 
-      <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: `${t.accent}10`, border: `1px solid ${t.accent}33`, fontSize: 11, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", lineHeight: 1.5 }}>
-        Signups today: <strong style={{ color: t.fg }}>{data.users?.today ?? 0}</strong> · Last 30d: <strong style={{ color: t.fg }}>{data.users?.last_30d ?? 0}</strong>
+      <div style={{ padding: "14px 16px", borderRadius: 12, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 12 }}>
+        <PillRow label="Documents by type" entries={docTypeEntries} t={t} empty="No documents stored yet." />
+      </div>
+
+      <div style={{ padding: "10px 14px", borderRadius: 10, background: `${t.accent}10`, border: `1px solid ${t.accent}33`, fontSize: 11, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", lineHeight: 1.6 }}>
+        <div>
+          Signups today: <strong style={{ color: t.fg }}>{data.users?.today ?? 0}</strong> · Last 30d: <strong style={{ color: t.fg }}>{data.users?.last_30d ?? 0}</strong>
+        </div>
+        <div>
+          TTL: last sweep <strong style={{ color: t.fg }}>{formatRelative(data.sweeps?.last_run_at)}</strong> · {data.sweeps?.runs_30d ?? 0} runs (30d) · {data.docs?.expiring_24h ?? 0} expiring in 24h
+        </div>
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Main panel — tabs gated on role/owner
+// Page shell — tab nav + auth gate, URL-driven via ?tab=
 // ─────────────────────────────────────────────────────────────────────────
-export default function AdminPanel({ onClose, t }) {
-  const { role, isOwner } = useAuth();
-  const [activeTab, setActiveTab] = useState("users");
+export default function AdminPanel() {
+  const { user, role, isOwner, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [themeKey, setThemeKey] = useState("warm");
+
+  useEffect(() => {
+    storageGet("theme").then(saved => {
+      if (saved && THEMES[saved]) setThemeKey(saved);
+    });
+  }, []);
+
+  const t = useMemo(() => THEMES[themeKey], [themeKey]);
 
   const isAdmin = role === "admin";
-  const tabs = [
-    { id: "users",    label: "Users",     icon: Users,      visible: isAdmin },
-    { id: "analytics", label: "Analytics", icon: BarChart3, visible: isOwner },
-    { id: "grants",   label: "Grant Pro", icon: Gift,       visible: isAdmin || isOwner },
-  ].filter(tab => tab.visible);
+  const isAuthorized = !!user && (isAdmin || isOwner);
 
-  // If active tab is hidden (e.g. role changed), fall back to first available.
+  // Auth gate: not signed in OR not admin/owner → home.
   useEffect(() => {
-    if (tabs.length > 0 && !tabs.some(tab => tab.id === activeTab)) {
-      setActiveTab(tabs[0].id);
-    }
-  }, [tabs, activeTab]);
+    if (authLoading) return;
+    if (!user || !isAuthorized) navigate("/", { replace: true });
+  }, [authLoading, user, isAuthorized, navigate]);
+
+  const tabs = useMemo(() => [
+    { id: "users",     label: "Users",     icon: Users,     visible: isAdmin },
+    { id: "analytics", label: "Analytics", icon: BarChart3, visible: isOwner },
+    { id: "roadmap",   label: "Roadmap",   icon: Map,       visible: isAdmin || isOwner },
+    { id: "grants",    label: "Grant Pro", icon: Gift,      visible: isAdmin || isOwner },
+  ].filter(tab => tab.visible), [isAdmin, isOwner]);
+
+  // URL-driven active tab: ?tab=analytics. Lets the user deep-link
+  // (Roadmap menu item, browser back button) without a separate route.
+  const tabFromUrl = searchParams.get("tab");
+  const activeTab = tabs.some(tab => tab.id === tabFromUrl)
+    ? tabFromUrl
+    : tabs[0]?.id ?? "users";
+
+  const setActiveTab = (id) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", id);
+      return next;
+    }, { replace: true });
+  };
+
+  if (authLoading || !user) {
+    return (
+      <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
+        <p style={{ color: t.fgSoft }}>Loading…</p>
+      </div>
+    );
+  }
+  if (!isAuthorized) return null;
 
   return (
-    <Dialog.Root open onOpenChange={o => { if (!o) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay style={OVERLAY} />
-        <Dialog.Content
-          aria-describedby={undefined}
-          style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", background: t.bg, borderRadius: 20, width: "calc(100% - 48px)", maxWidth: 620, height: "min(620px, 85vh)", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden", zIndex: 1001, outline: "none" }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: `1px solid ${t.borderSoft}` }}>
-            <Dialog.Title style={{ fontSize: 16, fontWeight: 720, color: t.fg, fontFamily: "'DM Sans', sans-serif", margin: 0 }}>Admin Panel</Dialog.Title>
-            <Dialog.Close asChild>
-              <button aria-label="Close" style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={16} strokeWidth={2} /></button>
-            </Dialog.Close>
+    <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", fontFamily: "'DM Sans', sans-serif" }}>
+      <header style={{ borderBottom: `1px solid ${t.borderSoft}`, padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Link to="/" style={{ ...LINK_RESET, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: t.accentSoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <BookOpen size={16} style={{ color: t.accent, transform: "translateY(1px)" }} />
+          </div>
+          <span style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>ReadFlow</span>
+        </Link>
+        <Link to="/" style={{ ...LINK_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: t.fgSoft, padding: "6px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: "transparent" }}>
+          <ArrowLeft size={13} /> Back to app
+        </Link>
+      </header>
+
+      <main style={{ flex: 1, padding: "32px 24px 60px", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 1180 }}>
+          <div style={{ marginBottom: 20 }}>
+            <h1 style={{ fontSize: 32, fontWeight: 740, color: t.fg, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
+              <DiaTextReveal
+                text="Admin Panel"
+                colors={getRevealColors(themeKey)}
+                textColor={t.fg}
+                duration={1.2}
+              />
+            </h1>
+            <p style={{ fontSize: 13, color: t.fgSoft, margin: 0 }}>
+              <DiaTextReveal
+                text="User management, owner analytics, and Pro grants — restricted to admin or owner roles."
+                colors={getRevealColors(themeKey)}
+                textColor={t.fgSoft}
+                duration={1.5}
+              />
+            </p>
           </div>
 
-          {tabs.length > 1 && (
-            <div role="tablist" style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: `1px solid ${t.borderSoft}` }}>
-              {tabs.map(({ id, label, icon: Icon }) => {
-                const active = activeTab === id;
-                return (
-                  <button
-                    key={id}
-                    role="tab"
-                    aria-selected={active}
-                    tabIndex={active ? 0 : -1}
-                    onClick={() => setActiveTab(id)}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = t.fg; }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = t.fgSoft; }}
-                    className="rf-static"
-                    style={{
-                      display: "flex", alignItems: "center", gap: 6,
-                      padding: "9px 14px",
-                      border: "none",
-                      background: "transparent",
-                      borderBottom: active ? `2px solid ${t.accent}` : "2px solid transparent",
-                      color: active ? t.accent : t.fgSoft,
-                      cursor: "pointer",
-                      fontSize: 13, fontWeight: 600,
-                      fontFamily: "'DM Sans', sans-serif",
-                      marginBottom: -1,
-                      outline: "none",
-                      transition: "color 0.15s, border-color 0.15s",
-                    }}
-                  >
-                    <Icon size={14} /> {label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <div style={{ background: t.bg, border: `1px solid ${t.borderSoft}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 20px rgba(0,0,0,0.04)" }}>
+            {tabs.length > 1 && (
+              <div role="tablist" style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: `1px solid ${t.borderSoft}` }}>
+                {tabs.map(({ id, label, icon: Icon }) => {
+                  const active = activeTab === id;
+                  return (
+                    <button
+                      key={id}
+                      role="tab"
+                      aria-selected={active}
+                      tabIndex={active ? 0 : -1}
+                      onClick={() => setActiveTab(id)}
+                      onMouseEnter={e => { if (!active) e.currentTarget.style.color = t.fg; }}
+                      onMouseLeave={e => { if (!active) e.currentTarget.style.color = t.fgSoft; }}
+                      className="rf-static"
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        padding: "9px 14px",
+                        border: "none",
+                        background: "transparent",
+                        borderBottom: active ? `2px solid ${t.accent}` : "2px solid transparent",
+                        color: active ? t.accent : t.fgSoft,
+                        cursor: "pointer",
+                        fontSize: 13, fontWeight: 600,
+                        fontFamily: "'DM Sans', sans-serif",
+                        marginBottom: -1,
+                        outline: "none",
+                        transition: "color 0.15s, border-color 0.15s",
+                      }}
+                    >
+                      <Icon size={14} /> {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-          <ScrollArea.Root style={{ flex: 1, overflow: "hidden" }}>
-            <ScrollArea.Viewport style={{ height: "100%", width: "100%" }}>
+            <div>
               {tabs.length === 0 ? (
                 <div style={{ padding: 40, textAlign: "center", color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}>You don't have access to any admin tools.</div>
               ) : activeTab === "users" ? <UsersTab t={t} />
                 : activeTab === "grants" ? <GrantProTab t={t} />
                 : activeTab === "analytics" ? <AnalyticsTab t={t} />
+                : activeTab === "roadmap" ? <RoadmapTab t={t} />
                 : null}
-            </ScrollArea.Viewport>
-            <ScrollArea.Scrollbar orientation="vertical" style={{ display: "flex", userSelect: "none", touchAction: "none", padding: 2, width: 8 }}>
-              <ScrollArea.Thumb style={{ flex: 1, background: t.border, borderRadius: 4 }} />
-            </ScrollArea.Scrollbar>
-          </ScrollArea.Root>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <Footer t={t} />
+    </div>
   );
 }
