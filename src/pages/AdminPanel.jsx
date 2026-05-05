@@ -163,10 +163,11 @@ function GrantProTab({ t }) {
     const { data, error } = await supabase.rpc("grant_pro_access", { target_email: email.trim(), months });
     setBusy(false);
     if (error) { showToast("Grant failed: " + error.message, "error"); return; }
+    const monthsLabel = `${months} month${months === 1 ? "" : "s"}`;
     if (data?.status === "queued") {
-      showToast(`Queued ${months} months for ${email.trim()} — will apply when they sign up.`, "success");
+      showToast(`Queued ${monthsLabel} for ${email.trim()} — will apply when they sign up.`, "success");
     } else {
-      showToast(`Granted ${months} months Pro to ${email.trim()}`, "success");
+      showToast(`Granted ${monthsLabel} Pro to ${email.trim()}`, "success");
     }
     setEmail("");
     fetchGrants();
