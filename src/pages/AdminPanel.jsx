@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, BookOpen, RefreshCw, Users, Gift, BarChart3, Crown, Trash2,
-  AlertCircle, ChevronDown, Check, Map,
+  AlertCircle, ChevronDown, Check, Map, Clock,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { supabase } from "../utils/supabase";
@@ -139,14 +139,20 @@ function GrantProTab({ t }) {
   const [months, setMonths] = useState(3);
   const [busy, setBusy] = useState(false);
   const [grants, setGrants] = useState([]);
+  const [pendingGrants, setPendingGrants] = useState([]);
   const [loadingGrants, setLoadingGrants] = useState(true);
 
   const fetchGrants = useCallback(async () => {
     setLoadingGrants(true);
-    const { data, error } = await supabase.rpc("list_active_pro_grants");
+    const [active, pending] = await Promise.all([
+      supabase.rpc("list_active_pro_grants"),
+      supabase.rpc("list_pending_pro_grants"),
+    ]);
     setLoadingGrants(false);
-    if (error) { showToast("Couldn't load grants: " + error.message, "error"); return; }
-    setGrants(data ?? []);
+    if (active.error) { showToast("Couldn't load active grants: " + active.error.message, "error"); }
+    else setGrants(active.data ?? []);
+    if (pending.error) { showToast("Couldn't load pending grants: " + pending.error.message, "error"); }
+    else setPendingGrants(pending.data ?? []);
   }, [showToast]);
 
   useEffect(() => { fetchGrants(); }, [fetchGrants]);
@@ -154,10 +160,15 @@ function GrantProTab({ t }) {
   const handleGrant = async () => {
     if (!email.trim()) { showToast("Enter an email", "error"); return; }
     setBusy(true);
-    const { error } = await supabase.rpc("grant_pro_access", { target_email: email.trim(), months });
+    const { data, error } = await supabase.rpc("grant_pro_access", { target_email: email.trim(), months });
     setBusy(false);
     if (error) { showToast("Grant failed: " + error.message, "error"); return; }
-    showToast(`Granted ${months} months Pro to ${email.trim()}`, "success");
+    const monthsLabel = `${months} month${months === 1 ? "" : "s"}`;
+    if (data?.status === "queued") {
+      showToast(`Queued ${monthsLabel} for ${email.trim()} — will apply when they sign up.`, "success");
+    } else {
+      showToast(`Granted ${monthsLabel} Pro to ${email.trim()}`, "success");
+    }
     setEmail("");
     fetchGrants();
   };
@@ -171,12 +182,22 @@ function GrantProTab({ t }) {
     fetchGrants();
   };
 
+  const handleRevokePending = async (grantId, targetEmail) => {
+    setBusy(true);
+    const { data, error } = await supabase.rpc("revoke_pending_pro_grant", { grant_id: grantId });
+    setBusy(false);
+    if (error) { showToast("Cancel failed: " + error.message, "error"); return; }
+    if (!data?.revoked) { showToast("Pending grant not found.", "error"); return; }
+    showToast(`Cancelled pending grant for ${targetEmail}`, "info");
+    fetchGrants();
+  };
+
   return (
     <div style={{ padding: "16px 20px" }}>
       <div style={{ padding: "14px 16px", borderRadius: 12, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: t.fg, fontFamily: "'DM Sans', sans-serif", marginBottom: 8 }}>Grant Pro access</div>
         <p style={{ fontSize: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", margin: "0 0 12px", lineHeight: 1.5 }}>
-          The user must already have a ReadFlow account. Grants stack onto active grants and don't require Stripe.
+          If the email already has a ReadFlow account, the grant applies immediately. Otherwise it's queued and auto-applies the moment they sign up. Grants stack and don't require Stripe.
         </p>
         <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
           <input
@@ -250,6 +271,31 @@ function GrantProTab({ t }) {
             style={{ background: "transparent", border: "none", cursor: busy ? "not-allowed" : "pointer", color: "#E25C5C", padding: "4px 8px", borderRadius: 6, display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}
           >
             <Trash2 size={12} /> Revoke
+          </button>
+        </div>
+      ))}
+
+      <div style={{ fontSize: 12, fontWeight: 700, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", textTransform: "uppercase", letterSpacing: "0.05em", margin: "20px 0 8px" }}>
+        Pending grants {!loadingGrants && `(${pendingGrants.length})`}
+      </div>
+      {loadingGrants ? null : pendingGrants.length === 0 ? (
+        <div style={{ padding: 20, color: t.fgSoft, fontSize: 13, fontFamily: "'DM Sans', sans-serif", textAlign: "center", border: `1px dashed ${t.border}`, borderRadius: 10 }}>
+          No pending grants — gifts to emails without an account will queue here.
+        </div>
+      ) : pendingGrants.map(p => (
+        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 6 }}>
+          <Clock size={14} style={{ color: t.fgSoft, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: t.fg, fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.email}</div>
+            <div style={{ fontSize: 11, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif" }}>{p.months} month{p.months === 1 ? "" : "s"} · queued {formatDate(p.granted_at)}</div>
+          </div>
+          <button
+            onClick={() => handleRevokePending(p.id, p.email)}
+            disabled={busy}
+            aria-label={`Cancel pending grant for ${p.email}`}
+            style={{ background: "transparent", border: "none", cursor: busy ? "not-allowed" : "pointer", color: "#E25C5C", padding: "4px 8px", borderRadius: 6, display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}
+          >
+            <Trash2 size={12} /> Cancel
           </button>
         </div>
       ))}
