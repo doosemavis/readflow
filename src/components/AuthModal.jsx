@@ -108,10 +108,10 @@ const OAUTH_PROVIDERS = [
   },
 ];
 
-export default function AuthModal({ onClose, t, initialView = "login" }) {
+export default function AuthModal({ onClose, t, initialView = "login", initialEmail = "" }) {
   const { signIn, signUp, resetPassword, signInWithOAuth, updatePassword, signOut, clearRecovery } = useAuth();
   const [view, setView] = useState(initialView);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);

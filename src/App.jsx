@@ -74,7 +74,7 @@ import {
   Toggle, Slider, Segment, Section, FontPicker, Tip,
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
   DocumentBody, useReadingGuide,
-  UserMenu, PendingDeletionBanner, PostDeletionLockoutBanner,
+  UserMenu, PendingDeletionBanner, PostDeletionLockoutBanner, GiftBanner,
   DiaTextReveal, CatLoader, ErrorBoundary, Footer,
 } from "./components";
 
@@ -123,11 +123,39 @@ export default function App() {
   const [theme, setTheme] = useState("warm");
 
   // ── Auth ──
-  const { user, role, loading: authLoading, deletionEffectiveAt, refreshDeletionStatus, isRecovering, clearRecovery } = useAuth();
+  const { user, role, loading: authLoading, deletionEffectiveAt, refreshDeletionStatus, isRecovering, clearRecovery, signOut } = useAuth();
   const { showToast } = useToast();
   const { avatar, saveAvatar } = useAvatar(user?.id);
   const themePref = useThemePreference(user?.id);
   const [showAuth, setShowAuth] = useState(false);
+  // Defaults overridden when the gift banner CTA opens AuthModal — lets us
+  // preselect Sign Up vs Sign In and prefill the recipient email.
+  const [authInitialView, setAuthInitialView] = useState("login");
+  const [authInitialEmail, setAuthInitialEmail] = useState("");
+
+  // Gift link state — populated on mount from ?gift_email=&gift_status=
+  // (set by the send-grant-email Edge Function). Cleared after the user
+  // takes an action so a refresh doesn't re-show the banner.
+  const [gift, setGift] = useState({ email: null, status: null });
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const giftEmail = params.get("gift_email");
+    const giftStatus = params.get("gift_status");
+    if (giftEmail) setGift({ email: giftEmail, status: giftStatus });
+  }, []);
+  const clearGift = () => {
+    setGift({ email: null, status: null });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("gift_email");
+    url.searchParams.delete("gift_status");
+    window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+  };
+  const handleGiftPrimary = ({ initialView, initialEmail }) => {
+    setAuthInitialView(initialView);
+    setAuthInitialEmail(initialEmail);
+    setShowAuth(true);
+  };
+  const handleGiftSignOut = async () => { await signOut(); };
 
   // Force-open AuthModal in "set new password" mode when AuthContext detects
   // a Supabase password-recovery session (user clicked the email reset link).
@@ -482,7 +510,7 @@ export default function App() {
       {showPricing && <PricingModal onClose={() => setShowPricing(false)} onSelectPlan={handleSelectPlan} hasUsedTrial={sub.isTrial || sub.plan === "pro"} t={t} />}
       {showCheckout && <CheckoutModal billing={checkoutBilling} onClose={() => setShowCheckout(false)} t={t} />}
       {showPaywall && <PaywallModal uploadsUsed={sub.uploadsUsed} onUpgrade={() => { setShowPaywall(false); setShowPricing(true); }} onClose={() => setShowPaywall(false)} t={t} />}
-      {showAuth && <AuthModal onClose={() => { setShowAuth(false); clearRecovery?.(); }} t={t} initialView={isRecovering ? "setPassword" : "login"} />}
+      {showAuth && <AuthModal onClose={() => { setShowAuth(false); setAuthInitialView("login"); setAuthInitialEmail(""); clearRecovery?.(); }} t={t} initialView={isRecovering ? "setPassword" : authInitialView} initialEmail={authInitialEmail} />}
       {/* AvatarSettingsModal stays mounted so Radix Dialog can run its proper
           open→close lifecycle. Force-unmounting via `{show && ...}` (the pattern
           we use for the others) leaks body styles like pointer-events:none on
@@ -508,6 +536,7 @@ export default function App() {
   // ═══════════════════════════════════════════
   if (!text && !loading) return (
     <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", fontFamily: "'DM Sans', sans-serif" }}>
+      {gift.email && <GiftBanner giftEmail={gift.email} giftStatus={gift.status} t={t} onPrimary={handleGiftPrimary} onSignOut={handleGiftSignOut} onDismiss={clearGift} />}
       {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
       {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
       {modals}
@@ -587,6 +616,7 @@ export default function App() {
   // ═══════════════════════════════════════════
   return (
     <div style={{ height: "100vh", overflow: "hidden", background: t.bg, color: t.fg, fontFamily: "'DM Sans', sans-serif", display: "flex", flexDirection: "column" }}>
+      {gift.email && <GiftBanner giftEmail={gift.email} giftStatus={gift.status} t={t} onPrimary={handleGiftPrimary} onSignOut={handleGiftSignOut} onDismiss={clearGift} />}
       {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
       {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>

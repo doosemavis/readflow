@@ -12,6 +12,14 @@ import { ToastProvider } from "./components/Toast.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import "./styles/global.css";
 
+// Swap the favicon to the magenta dev variant so localhost tabs are visually
+// distinct from production. Vite sets import.meta.env.DEV at build time, so
+// the production bundle never executes this branch.
+if (import.meta.env.DEV) {
+  const link = document.querySelector('link[rel="icon"]');
+  if (link) link.setAttribute("href", "/favicon-dev.svg");
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary
