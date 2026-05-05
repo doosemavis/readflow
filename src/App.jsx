@@ -54,7 +54,7 @@ const FMT_PCT_FROM_FRAC = v => `${Math.round(v * 100)}%`;
 // doUpload validates against. Picker hint and runtime check stay in sync
 // because both derive from the same source. The `accept` attribute alone
 // can't be relied on — drag-and-drop and "show all files" both bypass it.
-const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.html,.htm,.csv,.json,.log,.rtf";
+const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.html,.htm,.json";
 const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, "")));
 
 // Theme picker layout: left column = light themes, right column = dark themes (5 + 5).
@@ -62,7 +62,7 @@ const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, 
 // in two visual columns. Add new themes to the appropriate array — order within each is the row order.
 const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
 const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
-import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, detectTextStructure, runThemeTransition } from "./utils";
+import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, runThemeTransition } from "./utils";
 import { supabase } from "./utils/supabase";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
@@ -354,12 +354,13 @@ export default function App() {
       // branch and `.text()` decodes its binary bytes as UTF-8 garbage —
       // user sees a screen of gibberish instead of a clear error.
       if (!SUPPORTED_EXTS.has(ext)) {
-        throw new Error(`ReadFlow doesn't support .${ext} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, HTML, CSV, JSON, LOG, RTF).`);
+        throw new Error(`ReadFlow doesn't support .${ext} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, HTML, JSON).`);
       }
       if (ext === "pdf") { setLoadMsg("Loading PDF engine…"); sections = await parsePDF(file); }
       else if (ext === "epub") { setLoadMsg("Unpacking EPUB…"); sections = await parseEPUB(file); }
       else if (ext === "docx") { setLoadMsg("Extracting DOCX…"); sections = await parseDOCX(file); }
       else if (ext === "html" || ext === "htm") { setLoadMsg("Parsing HTML…"); sections = parseHTMLStructured(await file.text()); }
+      else if (ext === "md") { setLoadMsg("Parsing Markdown…"); sections = parseMarkdownStructured(await file.text()); }
       else { sections = detectTextStructure(await file.text()); }
       const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
       // Empty-content guard: if the parser returned no readable text, the

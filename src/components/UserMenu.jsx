@@ -1,4 +1,4 @@
-import { LogOut, Settings, ChevronDown, ChevronRight, User, UserCircle, ImageIcon, Palette, CreditCard, Trash2, Receipt, ExternalLink } from "lucide-react";
+import { LogOut, Settings, ChevronDown, ChevronRight, User, UserCircle, ImageIcon, Palette, CreditCard, Trash2, Receipt, ExternalLink, Map } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
@@ -172,6 +172,16 @@ export default function UserMenu({ t, onShowAuth, onShowAdmin, onShowAvatarSetti
                     style={{ padding: "10px 12px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, outline: "none", userSelect: "none" }}
                   >
                     <User size={14} style={{ color: t.icon }} /> Admin Panel
+                  </DropdownMenu.Item>
+                )}
+                {(role === "admin" || isOwner) && (
+                  <DropdownMenu.Item
+                    onSelect={() => navigate("/admin/roadmap")}
+                    onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                    style={{ padding: "10px 12px", cursor: "pointer", color: t.fg, fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 8, borderRadius: 8, outline: "none", userSelect: "none" }}
+                  >
+                    <Map size={14} style={{ color: t.icon }} /> Roadmap
                   </DropdownMenu.Item>
                 )}
                 <DropdownMenu.Separator style={{ height: 1, background: t.borderSoft, margin: "4px 0" }} />
