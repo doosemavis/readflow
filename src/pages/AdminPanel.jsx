@@ -160,14 +160,27 @@ function GrantProTab({ t }) {
   const handleGrant = async () => {
     if (!email.trim()) { showToast("Enter an email", "error"); return; }
     setBusy(true);
-    const { data, error } = await supabase.rpc("grant_pro_access", { target_email: email.trim(), months });
-    setBusy(false);
-    if (error) { showToast("Grant failed: " + error.message, "error"); return; }
+    const trimmedEmail = email.trim();
+    const { data, error } = await supabase.rpc("grant_pro_access", { target_email: trimmedEmail, months });
+    if (error) { setBusy(false); showToast("Grant failed: " + error.message, "error"); return; }
+
     const monthsLabel = `${months} month${months === 1 ? "" : "s"}`;
-    if (data?.status === "queued") {
-      showToast(`Queued ${monthsLabel} for ${email.trim()} — will apply when they sign up.`, "success");
+    const kind = data?.status === "queued" ? "queued" : "applied";
+
+    // Fire-and-await the notification email. If it fails, the grant still
+    // stands — surface a soft warning instead of rolling back.
+    const { error: emailErr } = await supabase.functions.invoke("send-grant-email", {
+      body: { to: trimmedEmail, kind, months },
+    });
+    setBusy(false);
+
+    if (kind === "queued") {
+      showToast(`Queued ${monthsLabel} for ${trimmedEmail} — will apply when they sign up.`, "success");
     } else {
-      showToast(`Granted ${monthsLabel} Pro to ${email.trim()}`, "success");
+      showToast(`Granted ${monthsLabel} Pro to ${trimmedEmail}`, "success");
+    }
+    if (emailErr) {
+      showToast(`Grant succeeded but email failed to send: ${emailErr.message}`, "error");
     }
     setEmail("");
     fetchGrants();
