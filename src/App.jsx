@@ -129,6 +129,64 @@ export default function App() {
   const themePref = useThemePreference(user?.id);
   const [showAuth, setShowAuth] = useState(false);
 
+  // Gift link landing toast — fires once on mount when the URL has
+  // ?gift_email=&gift_status= (set by the send-grant-email Edge Function),
+  // then watches for the user to sign in as the recipient so it can fire a
+  // celebratory follow-up toast at the moment the gift actually "lands."
+  //
+  // initialFiredRef gates the first-mount toast so it can't re-fire if the
+  // user object churns. pendingGift carries the recipient email forward
+  // across the auth-state change between the initial toast and the
+  // celebration. URL params are stripped only when we know we're done
+  // (gift landed, signed in as someone else, or already-recipient case).
+  const giftInitialFiredRef = useRef(false);
+  const [pendingGift, setPendingGift] = useState(null);
+  useEffect(() => {
+    if (authLoading) return;
+
+    const stripUrl = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("gift_email");
+      url.searchParams.delete("gift_status");
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    };
+
+    // First-mount: parse URL, fire the initial toast based on auth state.
+    if (!giftInitialFiredRef.current) {
+      giftInitialFiredRef.current = true;
+      const params = new URLSearchParams(window.location.search);
+      const giftEmail = params.get("gift_email");
+      const giftStatus = params.get("gift_status");
+      if (!giftEmail) return;
+
+      const recipientMatchesUser = user?.email?.toLowerCase() === giftEmail.toLowerCase();
+      const signedInAsOther = !!user && !recipientMatchesUser;
+
+      if (signedInAsOther) {
+        showToast(`This gift is for ${giftEmail}. Sign out to redeem on that account.`, "info", 10000);
+        stripUrl();
+      } else if (recipientMatchesUser) {
+        showToast("🎁 Your ReadFlow Pro gift is active!", "success", 8000);
+        stripUrl();
+      } else if (giftStatus === "applied") {
+        showToast(`🎁 Welcome back — sign in with ${giftEmail} to access your Pro gift.`, "info", 9000);
+        setPendingGift({ email: giftEmail });
+      } else {
+        showToast(`🎁 You've been gifted ReadFlow Pro. Sign up with ${giftEmail} to redeem.`, "info", 9000);
+        setPendingGift({ email: giftEmail });
+      }
+      return;
+    }
+
+    // Follow-up: a pending gift is waiting for the user to sign in. If they
+    // just authenticated as the recipient, fire the celebration toast.
+    if (pendingGift && user?.email?.toLowerCase() === pendingGift.email.toLowerCase()) {
+      showToast("🎁 Your ReadFlow Pro gift is active!", "success", 8000);
+      setPendingGift(null);
+      stripUrl();
+    }
+  }, [authLoading, user, showToast, pendingGift]);
+
   // Force-open AuthModal in "set new password" mode when AuthContext detects
   // a Supabase password-recovery session (user clicked the email reset link).
   // The modal is non-dismissible in this mode — user must complete or sign out.
@@ -198,17 +256,24 @@ export default function App() {
   // Sync favicon + browser-chrome theme-color to the active theme. SVG is
   // regenerated as a data URI on each theme change; the `<link rel="icon">`
   // and `<meta name="theme-color">` in index.html are mutated in place.
+  //
+  // Dev override: in `vite` (import.meta.env.DEV), force the favicon to
+  // magenta so localhost tabs are visually distinct from production tabs.
+  // theme-color still tracks the active theme so the browser chrome doesn't
+  // flash bright pink — only the tab favicon does.
   useEffect(() => {
+    const accent = import.meta.env.DEV ? "#FF1493" : t.accent;
+
     // Pick white or near-black for the book icon based on the accent's
     // perceived luminance — white on light accents (e.g. midnight's pale
     // blue) reads as low-contrast mush, so flip to dark for those.
-    const r = parseInt(t.accent.slice(1, 3), 16) / 255;
-    const g = parseInt(t.accent.slice(3, 5), 16) / 255;
-    const b = parseInt(t.accent.slice(5, 7), 16) / 255;
+    const r = parseInt(accent.slice(1, 3), 16) / 255;
+    const g = parseInt(accent.slice(3, 5), 16) / 255;
+    const b = parseInt(accent.slice(5, 7), 16) / 255;
     const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
     const iconColor = luminance > 0.55 ? "#1A1A1A" : "#FFFFFF";
 
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${t.accent}"/><g transform="translate(14 15)" fill="none" stroke="${iconColor}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g transform="scale(1.5)"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></g></g></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${accent}"/><g transform="translate(14 15)" fill="none" stroke="${iconColor}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g transform="scale(1.5)"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></g></g></svg>`;
     const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
     const links = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]');
@@ -512,7 +577,7 @@ export default function App() {
       {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
       {modals}
       <div style={{ position: "fixed", top: 14, right: 16, zIndex: 100 }}>
-        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} mockFreeMode={sub.mockFreeMode} onToggleMockFreeMode={sub.toggleMockFreeMode} />
+        <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} mockFreeMode={sub.mockFreeMode} onToggleMockFreeMode={sub.toggleMockFreeMode} isProGrantActive={sub.isProGrantActive} />
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 520 }}>
@@ -830,7 +895,7 @@ export default function App() {
               </Tip>
             ))}
           </div>
-          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} mockFreeMode={sub.mockFreeMode} onToggleMockFreeMode={sub.toggleMockFreeMode} />
+          <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} mockFreeMode={sub.mockFreeMode} onToggleMockFreeMode={sub.toggleMockFreeMode} isProGrantActive={sub.isProGrantActive} />
         </div>
 
         {/* Reader scroll area */}

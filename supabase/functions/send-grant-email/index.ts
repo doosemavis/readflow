@@ -43,9 +43,10 @@ function isValidPayload(p: unknown): p is GrantEmailPayload {
 
 function buildEmail({ to, kind, months }: GrantEmailPayload) {
   const monthsLabel = `${months} month${months === 1 ? "" : "s"}`;
-  // Tag the link with the recipient's email so the app can show a "this
-  // gift is for X" banner / prefill the auth form. Encoded for safety.
-  const giftUrl = `${APP_URL}?gift_email=${encodeURIComponent(to)}`;
+  // Tag the link with the recipient's email AND the kind so the app can
+  // show the right banner ("sign up" vs "sign in") without a server probe.
+  // Both encoded for safety.
+  const giftUrl = `${APP_URL}?gift_email=${encodeURIComponent(to)}&gift_status=${kind}`;
 
   if (kind === "queued") {
     return {
