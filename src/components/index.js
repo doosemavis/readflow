@@ -9,7 +9,6 @@ export { default as CatLoader } from "./CatLoader";
 export { default as PulsatingButton } from "./PulsatingButton";
 export { default as PendingDeletionBanner } from "./PendingDeletionBanner";
 export { default as PostDeletionLockoutBanner } from "./PostDeletionLockoutBanner";
-export { default as GiftBanner } from "./GiftBanner";
 export { default as ErrorBoundary } from "./ErrorBoundary";
 export { default as Footer } from "./Footer";
 export { default as LegalLayout } from "./LegalLayout";

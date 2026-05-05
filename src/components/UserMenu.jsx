@@ -1,4 +1,4 @@
-import { LogOut, Settings, ChevronDown, ChevronRight, User, UserCircle, ImageIcon, Palette, CreditCard, Trash2, Receipt, ExternalLink, Map } from "lucide-react";
+import { LogOut, Settings, ChevronDown, ChevronRight, User, UserCircle, ImageIcon, Palette, CreditCard, Trash2, Receipt, ExternalLink, Map, Gift } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { ROLES } from "../config/roles";
@@ -11,6 +11,11 @@ const ROLE_COLORS = {
   elevated: { bg: "#22C55E18", text: "#22C55E" },
   user:     { bg: "transparent", text: "inherit" },
 };
+
+// Gift badge — sits alongside the role badge under the user's email when
+// they have an active Pro grant. Amber tones differentiate it from the
+// blue admin badge. Background uses 12% alpha to match ROLE_COLORS shape.
+const GIFT_BADGE = { bg: "#D9770618", text: "#D97706" };
 
 function Avatar({ avatar, initial, accent, size = 28 }) {
   const br = Math.round(size * 0.28);
@@ -27,7 +32,7 @@ function Avatar({ avatar, initial, accent, size = 28 }) {
   );
 }
 
-export default function UserMenu({ t, onShowAuth, onShowAvatarSettings, onShowSubscription, onShowPaymentReceipts, showPaymentReceipts, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist, mockFreeMode, onToggleMockFreeMode }) {
+export default function UserMenu({ t, onShowAuth, onShowAvatarSettings, onShowSubscription, onShowPaymentReceipts, showPaymentReceipts, onShowDeleteAccount, avatar, themePersistEnabled, onToggleThemePersist, mockFreeMode, onToggleMockFreeMode, isProGrantActive }) {
   const { user, role, isOwner, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -69,6 +74,11 @@ export default function UserMenu({ t, onShowAuth, onShowAvatarSettings, onShowSu
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
                 {role !== "user" && (
                   <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 650, fontFamily: "'DM Sans', sans-serif", background: roleColor.bg, color: roleColor.text }}>{roleLabel}</span>
+                )}
+                {isProGrantActive && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 650, fontFamily: "'DM Sans', sans-serif", background: GIFT_BADGE.bg, color: GIFT_BADGE.text }}>
+                    <Gift size={11} /> Gift
+                  </span>
                 )}
                 {/* Owner-only Pro/Free view toggle for UI testing.
                     Pinned to the far right of the row via margin-left: auto so
