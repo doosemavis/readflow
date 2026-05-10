@@ -1,11 +1,14 @@
+import { useEffect } from "react";
 import { Lock, Crown } from "lucide-react";
 import { FREE_UPLOAD_LIMIT } from "../config/constants";
 import * as Dialog from "@radix-ui/react-dialog";
 import PulsatingButton from "./PulsatingButton";
+import { track } from "../utils/track";
 
 const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1000 };
 
 export default function PaywallModal({ uploadsUsed, onUpgrade, onClose, t }) {
+  useEffect(() => { track("paywall_view"); }, []);
   return (
     <Dialog.Root open onOpenChange={o => { if (!o) onClose(); }}>
       <Dialog.Portal>

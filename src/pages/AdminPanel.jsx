@@ -397,6 +397,63 @@ function PillRow({ label, entries, t, empty }) {
   );
 }
 
+// Marketing funnel — six stages from anonymous landing to paid checkout,
+// with stage-to-stage conversion. distinct-session counts come from the
+// public.events table (see migration 20260506000000_marketing_events.sql).
+function pct(num, denom) {
+  if (!denom || denom <= 0) return null;
+  return Math.round((num / denom) * 1000) / 10;
+}
+
+function FunnelSection({ funnel, t }) {
+  const stages = [
+    { key: "landing",            label: "Landing" },
+    { key: "signup",             label: "Signup" },
+    { key: "first_upload",       label: "First upload" },
+    { key: "paywall_view",       label: "Paywall view" },
+    { key: "checkout_started",   label: "Checkout started" },
+    { key: "checkout_succeeded", label: "Paid" },
+  ];
+  const counts = stages.map(s => Number(funnel?.[s.key] ?? 0));
+  const overall = pct(counts[5], counts[0]);
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "'DM Sans', sans-serif" }}>Funnel (30d)</div>
+        <div style={{ fontSize: 11, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif" }}>
+          Landing → Paid: <strong style={{ color: t.fg }}>{overall == null ? "—" : `${overall}%`}</strong>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {stages.map((s, i) => {
+          const count = counts[i];
+          const fromPrev = i === 0 ? null : pct(count, counts[i - 1]);
+          const sub = i === 0 ? "entry" : (fromPrev == null ? "—" : `${fromPrev}% from prev`);
+          return <StatCard key={s.key} label={s.label} value={count} sub={sub} t={t} />;
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TrafficSourcesSection({ sources, t }) {
+  const utmEntries = (sources?.utm_sources ?? []).map(r => [r.source, r.sessions]);
+  const refEntries = (sources?.referrers   ?? []).map(r => [r.host,   r.sessions]);
+  const direct = Number(sources?.direct ?? 0);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "14px 16px", borderRadius: 12, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "'DM Sans', sans-serif" }}>Traffic sources (30d)</div>
+        <div style={{ fontSize: 11, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif" }}>
+          Direct / no referrer: <strong style={{ color: t.fg }}>{direct}</strong>
+        </div>
+      </div>
+      <PillRow label="UTM (Urchin Tracking Module) sources"  entries={utmEntries} t={t} empty="No UTM-tagged landings yet — add ?utm_source=… to outbound links." />
+      <PillRow label="Top referrers" entries={refEntries} t={t} empty="No external referrers recorded yet." />
+    </div>
+  );
+}
+
 function AnalyticsTab({ t }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -405,7 +462,7 @@ function AnalyticsTab({ t }) {
   const refresh = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const [users, subs, mrr, conv, dels, docs, docTypes, storage, sweeps, cycles, db] = await Promise.all([
+      const [users, subs, mrr, conv, dels, docs, docTypes, storage, sweeps, cycles, db, funnel, sources] = await Promise.all([
         supabase.rpc("analytics_user_counts"),
         supabase.rpc("analytics_subscription_status"),
         supabase.rpc("analytics_mrr_cents"),
@@ -417,8 +474,10 @@ function AnalyticsTab({ t }) {
         supabase.rpc("analytics_ttl_sweeps"),
         supabase.rpc("analytics_subscription_billing_cycle"),
         supabase.rpc("analytics_database_bytes"),
+        supabase.rpc("analytics_funnel_30d"),
+        supabase.rpc("analytics_traffic_sources_30d"),
       ]);
-      const firstErr = [users, subs, mrr, conv, dels, docs, docTypes, storage, sweeps, cycles, db].find(r => r.error);
+      const firstErr = [users, subs, mrr, conv, dels, docs, docTypes, storage, sweeps, cycles, db, funnel, sources].find(r => r.error);
       if (firstErr) throw new Error(firstErr.error.message);
       setData({
         users: users.data,
@@ -432,6 +491,8 @@ function AnalyticsTab({ t }) {
         storage: storage.data,
         sweeps: sweeps.data,
         db: db.data,
+        funnel: funnel.data ?? {},
+        sources: sources.data ?? {},
       });
     } catch (e) {
       setErr(e.message);
@@ -492,6 +553,10 @@ function AnalyticsTab({ t }) {
         limitBytes={SUPABASE_DB_LIMIT_BYTES}
         t={t}
       />
+
+      <FunnelSection funnel={data.funnel} t={t} />
+
+      <TrafficSourcesSection sources={data.sources} t={t} />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "14px 16px", borderRadius: 12, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 12 }}>
         <PillRow label="Subscriptions by status" entries={subEntries} t={t} empty="No subscriptions yet." />

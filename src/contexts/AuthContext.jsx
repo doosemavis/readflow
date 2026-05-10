@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { supabase } from "../utils/supabase";
 import { getRolePermissions } from "../config/roles";
 import { setUserScope, clearUserScope } from "../utils/storage";
+import { track } from "../utils/track";
 
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPA_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -186,6 +187,7 @@ export function AuthProvider({ children }) {
           setDeletionRequestedAt(profile.deletion_requested_at ?? null);
           setDeletionEffectiveAt(profile.deletion_effective_at ?? null);
         });
+        track("signup");
       }
       return { data: json, error: null };
     } catch (err) {

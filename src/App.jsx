@@ -64,6 +64,7 @@ const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
 const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, runThemeTransition } from "./utils";
 import { supabase } from "./utils/supabase";
+import { track } from "./utils/track";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
 import { useAvatar } from "./hooks/useAvatar";
@@ -141,6 +142,10 @@ export default function App() {
   // (gift landed, signed in as someone else, or already-recipient case).
   const giftInitialFiredRef = useRef(false);
   const [pendingGift, setPendingGift] = useState(null);
+
+  // Marketing funnel: record one landing_view per session on first mount.
+  useEffect(() => { track("landing_view"); }, []);
+
   useEffect(() => {
     if (authLoading) return;
 
@@ -447,9 +452,11 @@ export default function App() {
     // freshly-parsed doc visible instead of being replaced by an error message.
     // recordUpload only fires after successful storage save so a Free user's
     // monthly quota isn't burned by a storage outage.
+    const wasFirstUpload = recentDocs.recentList.length === 0;
     try {
       await recentDocs.saveDoc(file.name, sections, sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n"));
       await sub.recordUpload();
+      if (wasFirstUpload) track("first_upload");
     }
     catch (e) {
       const msg = String(e?.message || e);
@@ -494,6 +501,7 @@ export default function App() {
     setShowPricing(false);
     setCheckoutBilling(billing);
     setShowCheckout(true);
+    track("checkout_started", { billing });
   }, [user, showToast]);
   // Open Stripe's hosted Customer Portal in the same tab. The function only
   // returns a URL if the user has a stripe_customer_id; we gate the menu
