@@ -70,7 +70,7 @@ Self-hosted, anonymous-safe funnel built on a single Supabase table. No third-pa
 
 - ~~Replace demo Stripe flow with real Checkout Sessions~~ ✅ done — `CheckoutModal` invokes a real Checkout Session; `stripe-webhook` Edge Function handles `customer.subscription.*` lifecycle (live mode — see Stripe live-mode caveat in Marketing Analytics section)
 - Move `useSubscription` from localStorage to Supabase (reads from `subscriptions` table populated by Stripe webhooks); pairs with the Stripe work
-- Remove DEV bypass button before deploy (`App.jsx` admin-only `setDevBypass` button)
+- ~~Remove DEV bypass button before deploy~~ ✅ done — replaced by owner-only `mockFreeMode` toggle in `UserMenu` (gated by `isOwner` check). No permanent bypass remains; owner can simulate Free state for UI testing via `effectiveAdminBypass = adminBypass && !mockFreeMode`.
 - Add error boundaries around parsers
 - ~~Swap `storage.js` adapter for documents~~ ✅ done — recent docs now in Supabase; small KV stays on localStorage by design
 - ~~Add `React.lazy()` for modals~~ ✅ done — six modals lazy-loaded, vendor chunks split via `vite.config.js` manualChunks
