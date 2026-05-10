@@ -48,9 +48,27 @@ Two-tier:
 
 `storage.js` also provides one-time GC helpers (`storageGcOrphanChunks`, `storageGcUnscopedKeys`) used by `cloudDocs.migrateLocalToCloud` to clean up legacy chunk data and pre-scoping leftovers on first authed load.
 
+### Marketing Analytics
+
+Self-hosted, anonymous-safe funnel built on a single Supabase table. No third-party analytics dependency.
+
+- **Client tracker** (`src/utils/track.js`): writes one row per event to `public.events`. Anonymous-safe (anon role can INSERT under RLS); UTM-sticky (URL params persist to localStorage so a `signup` 3 days after `landing_view` still attributes correctly); failure-tolerant (any error is logged and swallowed — analytics must never break a user-facing flow).
+- **Six event names**, fixed by table CHECK constraint:
+  - `landing_view` — `App.jsx` mount useEffect
+  - `signup` — `AuthContext.signUp` after successful Supabase signup
+  - `first_upload` — `App.jsx attemptUpload` after first successful `saveDoc` (gated on `recentList.length === 0`)
+  - `paywall_view` — `PaywallModal` mount useEffect
+  - `checkout_started` — `App.jsx handleSelectPlan` (post email-verify gate)
+  - `checkout_succeeded` — server-side from `stripe-webhook` Edge Function on `customer.subscription.created`. Idempotent (existence check on `(user_id, name)` blocks Stripe redeliveries). Uses `session_id = "server:<user_id>"` to mark backend-originated rows.
+- **Owner-gated RPCs** (`SECURITY DEFINER`, `public.is_current_user_owner()` check):
+  - `analytics_funnel_30d()` — cohort-anchored funnel. Cohort = distinct sessions that fired `landing_view` in the 30d window; subsequent stages join via `session_id` (signup) or `user_id` (post-signup). Each stage is a strict subset of the prior, so conversion percentages are real cohort percentages. Defined in `20260506000000_marketing_events.sql`, body replaced by `20260510120000_funnel_cohort_fix.sql`.
+  - `analytics_traffic_sources_30d()` — top UTM sources, top referrers, direct (no-referrer) count.
+- **AdminPanel widgets**: "Funnel (30d)" and "Traffic sources (30d)" render the RPC results. Owner-only.
+- **Stripe live-mode caveat**: the deployed webhook uses `sk_live_…`, so Stripe test cards will not fire `checkout_succeeded`. Verification of that event waits on the next real subscription unless a parallel test-mode webhook is configured.
+
 ### Key Known TODOs (from README)
 
-- Replace demo Stripe flow with real Checkout Sessions (CheckoutModal currently fake-Promises a delay then calls onSuccess — no Stripe API call yet)
+- ~~Replace demo Stripe flow with real Checkout Sessions~~ ✅ done — `CheckoutModal` invokes a real Checkout Session; `stripe-webhook` Edge Function handles `customer.subscription.*` lifecycle (live mode — see Stripe live-mode caveat in Marketing Analytics section)
 - Move `useSubscription` from localStorage to Supabase (reads from `subscriptions` table populated by Stripe webhooks); pairs with the Stripe work
 - Remove DEV bypass button before deploy (`App.jsx` admin-only `setDevBypass` button)
 - Add error boundaries around parsers
