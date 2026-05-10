@@ -22,7 +22,13 @@
     <meta name="twitter:description" content="Adaptive typography, accessible themes, and reading aids that make long-form text easier on every kind of brain." />
     <meta name="twitter:image" content="https://myreadflow.com/favicon.svg" />
 
-    <!-- Favicon (SVG works in all modern browsers; .ico fallback can be added later if IE/old browsers matter) -->
+    <!-- Favicon: ICO fallback first for browsers that can't render SVG
+         favicons (IE 5–11, very old Firefox/Chrome/Safari). The ICO is a
+         multi-resolution snapshot of favicon.svg at the warm-theme defaults
+         (16/32/48/64 px PNG inside the .ico container). Modern browsers see
+         the SVG type-hint below and prefer that — App.jsx then mutates its
+         href at runtime to follow theme changes. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
 
