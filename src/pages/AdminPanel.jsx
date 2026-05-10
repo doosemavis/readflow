@@ -15,7 +15,7 @@ import {
 } from "../config/constants";
 import { storageGet } from "../utils/storage";
 import { useToast } from "../components/Toast";
-import CatLoader from "../components/CatLoader";
+import BookLoader from "../components/BookLoader";
 import Footer from "../components/Footer";
 import { DiaTextReveal } from "../components/DiaTextReveal";
 import { getRevealColors } from "../config/themeColors";
@@ -97,7 +97,7 @@ function UsersTab({ t }) {
       </div>
       {error && <div style={{ margin: "12px 20px 0", padding: "10px 12px", borderRadius: 8, background: "#E25C5C18", border: "1px solid #E25C5C44", color: "#E25C5C", fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}>{error}</div>}
       {loading ? (
-        <div style={{ padding: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}><CatLoader size={120} /><span>Loading users…</span></div>
+        <div style={{ padding: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}><BookLoader size={120} t={t} /><span>Loading users…</span></div>
       ) : profiles.length === 0 ? (
         <div style={{ padding: 40, textAlign: "center", color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}>No users found.</div>
       ) : profiles.map((profile, i) => {
@@ -503,7 +503,7 @@ function AnalyticsTab({ t }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  if (loading) return <div style={{ padding: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}><CatLoader size={120} /><span>Loading analytics…</span></div>;
+  if (loading) return <div style={{ padding: 40, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", fontSize: 14 }}><BookLoader size={120} t={t} /><span>Loading analytics…</span></div>;
   if (err) return <div style={{ padding: 24, display: "flex", alignItems: "center", gap: 8, color: "#E25C5C", fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}><AlertCircle size={16} /> {err}</div>;
   if (!data) return null;
 

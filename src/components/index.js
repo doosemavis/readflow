@@ -5,7 +5,7 @@ export { SidebarRecentDocs, LandingRecentDocs } from "./RecentDocsList";
 export { default as DocumentBody } from "./DocumentBody";
 export { useReadingGuide } from "./ReadingGuideOverlay";
 export { default as UserMenu } from "./UserMenu";
-export { default as CatLoader } from "./CatLoader";
+export { default as BookLoader } from "./BookLoader";
 export { default as PulsatingButton } from "./PulsatingButton";
 export { default as PendingDeletionBanner } from "./PendingDeletionBanner";
 export { default as PostDeletionLockoutBanner } from "./PostDeletionLockoutBanner";

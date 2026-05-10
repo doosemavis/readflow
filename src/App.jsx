@@ -76,7 +76,7 @@ import {
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
   DocumentBody, useReadingGuide,
   UserMenu, PendingDeletionBanner, PostDeletionLockoutBanner,
-  DiaTextReveal, CatLoader, ErrorBoundary, Footer,
+  DiaTextReveal, BookLoader, ErrorBoundary, Footer,
 } from "./components";
 
 // Modals are conditionally rendered and not needed at first paint, so
@@ -572,7 +572,7 @@ export default function App() {
   // ═══════════════════════════════════════════
   if (!sub.loaded) return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}><CatLoader size={160} style={{ marginBottom: 14 }} /><p style={{ fontSize: 14, color: t.fgSoft }}>Loading ReadFlow…</p></div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}><BookLoader size={160} t={t} style={{ marginBottom: 14 }} /><p style={{ fontSize: 14, color: t.fgSoft }}>Loading ReadFlow…</p></div>
     </div>
   );
 
@@ -649,7 +649,7 @@ export default function App() {
   // ═══════════════════════════════════════════
   if (loading) return (
     <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
-      <CatLoader size={220} style={{ marginBottom: 20 }} />
+      <BookLoader size={220} t={t} style={{ marginBottom: 20 }} />
       <p style={{ fontSize: 16, fontWeight: 620, color: t.fg, marginBottom: 4 }}>{loadMsg}</p>
       <p style={{ fontSize: 13, color: t.fgSoft }}>This may take a moment for large files</p>
     </div>

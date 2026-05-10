@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { X, Lock, BookOpen, AlertCircle } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
-import CatLoader from "./CatLoader";
+import BookLoader from "./BookLoader";
 import { supabase } from "../utils/supabase";
 
 const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1100 };
@@ -91,7 +91,7 @@ export default function CheckoutModal({ billing, onClose, t }) {
             ) : (
               <>
                 <div style={{ display: "flex", justifyContent: "center" }}>
-                  <CatLoader size={48} />
+                  <BookLoader size={48} t={t} />
                 </div>
                 <p style={{ fontSize: 14, color: t.fg, fontWeight: 600, margin: "16px 0 6px" }}>Redirecting to secure checkout…</p>
                 <p style={{ fontSize: 12, color: t.fgSoft, margin: 0, display: "inline-flex", alignItems: "center", gap: 4 }}>

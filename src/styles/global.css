@@ -182,68 +182,6 @@ button:active {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Cat loader (CatLoader.jsx) ──
-   Four absolute-positioned divs each show a 50%×50% slice of a 2×2 sprite.
-   Each slice rotates around a corner anchor with staggered delays, producing
-   the "cat assembling itself" effect. --rf-cat-img is set inline by the
-   component so Vite's hashed asset URL flows through correctly. */
-.rf-cat {
-  position: relative;
-  width: var(--rf-cat-size, 220px);
-  max-width: 100%;
-  aspect-ratio: 1 / 1;
-  /* Sprite was re-encoded with alpha so the cream background can drop out. */
-  pointer-events: none;
-}
-.rf-cat__head,
-.rf-cat__body,
-.rf-cat__tail {
-  position: absolute;
-  inset: 0;
-  animation: rf-cat-rotating 2.79s cubic-bezier(.65, .54, .12, .93) infinite;
-  pointer-events: none;
-}
-.rf-cat__head::before,
-.rf-cat__body::before,
-.rf-cat__tail::before {
-  content: '';
-  position: absolute;
-  width: 50%;
-  height: 50%;
-  background-image: var(--rf-cat-img);
-  background-size: 200%;
-  background-repeat: no-repeat;
-}
-.rf-cat__head::before {
-  top: 0; right: 0;
-  background-position: 100% 0%;
-  transform-origin: 0% 100%;
-  transform: rotate(90deg);
-}
-.rf-cat__tail { animation-delay: 0.2s; }
-.rf-cat__tail::before {
-  left: 0; bottom: 0;
-  background-position: 0% 100%;
-  transform-origin: 100% 0%;
-  transform: rotate(-30deg);
-}
-.rf-cat__body { animation-delay: 0.1s; }
-.rf-cat__body:nth-of-type(2) { animation-delay: 0.2s; }
-.rf-cat__body::before {
-  right: 0; bottom: 0;
-  background-position: 100% 100%;
-  transform-origin: 0% 0%;
-}
-@keyframes rf-cat-rotating {
-  from { transform: rotate(720deg); }
-  to   { transform: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .rf-cat__head,
-  .rf-cat__body,
-  .rf-cat__tail { animation: none; }
-}
-
 /* ── Pulsating button (PulsatingButton.jsx) ──
    Two variants: "pulse" softly expands a same-color shadow each cycle;
    "ripple" emanates rings outward and fades to transparent. Color and
