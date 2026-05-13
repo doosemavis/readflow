@@ -899,9 +899,14 @@ export default function App() {
           )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {[{ on: neuroDiv, set: setNeuroDiv, icon: Baseline, tip: "NeuroDiv" }, { on: hueGuide, set: setHueGuide, icon: Palette, tip: "HueGuide" }, { on: focusMode, set: v => { setFocusMode(v); if (!v) setFocusPara(-1); }, icon: Focus, tip: "Focus" }].map(({ on, set, icon: Icon, tip }) => (
+            {/* Reader feature toggles. Tooltips use action-descriptive labels
+               (not product names like "NeuroDiv" / "HueGuide") so first-time
+               users understand what each toggle does without prior context.
+               aria-label mirrors the tip for screen readers, which never see
+               the tooltip. */}
+            {[{ on: neuroDiv, set: setNeuroDiv, icon: Baseline, tip: "Bold word starts (NeuroDiv)" }, { on: hueGuide, set: setHueGuide, icon: Palette, tip: "Line color tracking (HueGuide)" }, { on: focusMode, set: v => { setFocusMode(v); if (!v) setFocusPara(-1); }, icon: Focus, tip: "Focus current paragraph" }].map(({ on, set, icon: Icon, tip }) => (
               <Tip key={tip} label={tip} t={t} side="bottom">
-                <button onClick={() => set(!on)} className={on ? "rf-btn-icon-active" : ""} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: on ? t.accent : "transparent", color: on ? "#fff" : t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon size={16} strokeWidth={2} /></button>
+                <button onClick={() => set(!on)} aria-label={tip} aria-pressed={on} className={on ? "rf-btn-icon-active" : ""} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: on ? t.accent : "transparent", color: on ? "#fff" : t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon size={16} strokeWidth={2} /></button>
               </Tip>
             ))}
           </div>
