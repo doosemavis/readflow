@@ -6,6 +6,7 @@
    and is the strongest brand-aligned default before the user picks a font. */
 body {
   font-family: 'Atkinson Hyperlegible', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
 }
 
 /* ── Game button mechanic — all interactive buttons ── */
