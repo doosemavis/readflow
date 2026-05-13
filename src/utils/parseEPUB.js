@@ -1,5 +1,21 @@
 import { loadScript } from "./scriptLoader";
 
+// NOTE on main-thread vs worker placement (Phase 4 decision, 2026-05-13):
+//
+// parseEPUB stays on the main thread for now. The blocker is `DOMParser` +
+// DOM tree walking (node.nodeType, node.childNodes, querySelectorAll):
+// Web Workers don't have a DOM. To move this into a worker we'd either
+//   (a) swap DOMParser for parse5 / linkedom (~50-100KB worker bundle,
+//       ~half-day to rewrite walk() against the new tree shape), or
+//   (b) extract XHTML strings in the worker and parse DOM on main thread —
+//       which doesn't help, because the main-thread cost IS the DOM walk.
+//
+// Empirically the per-chapter walk() is ~5-20ms on typical novels — below
+// the loader's ~50ms stutter threshold. PDF analysis was the big offender
+// (moved to worker in Phase 3, src/workers/pdfAnalysis.js). EPUB stays
+// main-thread until measured stutter on real EPUBs justifies the parse5
+// rewrite. Tracked as a deferred TODO in READFLOW_LAUNCH_PLAN.md.
+
 export async function parseEPUB(file) {
   await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
   const JSZip = window.JSZip;
