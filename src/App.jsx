@@ -591,7 +591,13 @@ export default function App() {
       <div style={{ textAlign: "center", maxWidth: 520 }}>
         <div style={{ width: 68, height: 68, borderRadius: 20, background: t.accentSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><BookOpen size={32} style={{ color: t.accent, transform: "translateY(1px)" }} /></div>
         <h1 style={{ fontSize: 36, fontWeight: 740, marginBottom: 6, letterSpacing: "-0.025em" }}>
+          {/* key={theme} forces a remount on theme change so the gradient
+             sweep re-fires in the new palette — same trick the reader uses
+             on font change, applied here to theme change. Re-states the
+             accessibility-first positioning at the moment the user actually
+             exercises it (clicking a theme dot). */}
           <DiaTextReveal
+            key={theme}
             text="ReadFlow"
             colors={getRevealColors(theme)}
             textColor={t.fg}
@@ -600,6 +606,7 @@ export default function App() {
         </h1>
         <p style={{ fontSize: 15, color: t.fgSoft, marginBottom: 12, lineHeight: 1.6, maxWidth: 400, margin: "0 auto 12px", textWrap: "balance" }}>
           <DiaTextReveal
+            key={theme}
             text="Reading that adapts to you — typography, focus, and color tuned to the way your brain reads."
             colors={getRevealColors(theme)}
             textColor={t.fgSoft}
