@@ -2,9 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(gh api:*)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(git -C /Users/moosedavis/dev/readflow log --all --oneline -- supabase/migrations/20260506000000_marketing_events.sql src/utils/track.js)",
+      "Bash(git -C /Users/moosedavis/dev/readflow ls-tree theme-enhancement -- supabase/migrations/20260506000000_marketing_events.sql src/utils/track.js)",
+      "Bash(git *)"
     ]
   },
+  "enabledMcpjsonServers": [
+    "context7",
+    "magicui"
+  ],
   "hooks": {
     "Stop": [
       {
@@ -12,8 +19,8 @@
           {
             "type": "command",
             "command": "/Library/Frameworks/Python.framework/Versions/3.14/bin/mempalace mine /Users/moosedavis/.claude/projects/-Users-moosedavis-dev-readflow/ --mode convos --wing readflow >> /tmp/mempalace-mine.log 2>&1",
-            "async": true,
-            "statusMessage": "MemPalace: indexing session"
+            "statusMessage": "MemPalace: indexing session",
+            "async": true
           }
         ]
       }

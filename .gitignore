@@ -6,3 +6,10 @@ dist/
 # MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
+
+# Claude Desktop context bundle — kept local; uploaded to Claude Projects
+# manually. Not pushed to GitHub or deployed.
+READFLOW_CONTEXT.md
+
+# Strategic / launch planning notes — local reference only.
+READFLOW_LAUNCH_PLAN.md
