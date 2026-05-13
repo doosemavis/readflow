@@ -17,6 +17,7 @@
 // explicit import keeps the dependency clear at the file boundary.
 
 import { detectTextStructure, parseMarkdownStructured } from "../utils/detectStructure";
+import { analyzePDF } from "./pdfAnalysis";
 
 self.onmessage = (e) => {
   const { id, type, payload } = e.data || {};
@@ -30,6 +31,12 @@ self.onmessage = (e) => {
         break;
       case "parse-md":
         sections = parseMarkdownStructured(payload);
+        break;
+      case "parse-pdf":
+        // payload: { rawPages, resolvedOutline, debug }
+        // pdf.js calls (load, getDocument, getTextContent, outline resolution)
+        // happen on main thread; this branch runs the heuristics-heavy analysis.
+        sections = analyzePDF(payload);
         break;
       default:
         throw new Error(`Unknown parser type: ${type}`);
