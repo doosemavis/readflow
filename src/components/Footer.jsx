@@ -11,7 +11,9 @@ import ContactModal from "./ContactModal";
 // the address as plain text + a Copy button + an Open-in-mail-client link
 // for users who *do* have one set up.
 
-const LINK_RESET = { color: "inherit", textDecoration: "none", background: "none", border: "none", padding: 0, font: "inherit", cursor: "pointer" };
+// padding + inline-block expand the tap target to ≈44px tall without making
+// the visible text any bigger (a11y target, especially relevant on mobile).
+const LINK_RESET = { color: "inherit", textDecoration: "none", background: "none", border: "none", padding: "13px 12px", display: "inline-block", font: "inherit", cursor: "pointer" };
 
 export default function Footer({ t }) {
   const year = new Date().getFullYear();
@@ -40,7 +42,7 @@ export default function Footer({ t }) {
           <a
             href="#contact"
             onClick={(e) => { e.preventDefault(); setShowContact(true); }}
-            style={{ color: t.fgSoft, textDecoration: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", cursor: "pointer" }}
+            style={{ color: t.fgSoft, textDecoration: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", padding: "13px 12px", display: "inline-block" }}
           >
             Contact
           </a>
