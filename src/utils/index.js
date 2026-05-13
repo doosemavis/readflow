@@ -2,4 +2,5 @@ export { parsePDF } from "./parsePDF";
 export { parseEPUB } from "./parseEPUB";
 export { parseDOCX } from "./parseDOCX";
 export { detectTextStructure, parseHTMLStructured, parseMarkdownStructured } from "./detectStructure";
+export { parseInWorker } from "./parserWorker";
 export { runThemeTransition } from "./themeTransition";

@@ -62,7 +62,7 @@ const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, 
 // in two visual columns. Add new themes to the appropriate array — order within each is the row order.
 const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
 const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
-import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, runThemeTransition } from "./utils";
+import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, parseInWorker, runThemeTransition } from "./utils";
 import { supabase } from "./utils/supabase";
 import { track } from "./utils/track";
 import { useSubscription } from "./hooks/useSubscription";
@@ -471,8 +471,12 @@ export default function App() {
       else if (ext === "epub") { setLoadMsg("Unpacking EPUB…"); sections = await parseEPUB(file); }
       else if (ext === "docx") { setLoadMsg("Extracting DOCX…"); sections = await parseDOCX(file); }
       else if (ext === "html" || ext === "htm") { setLoadMsg("Parsing HTML…"); sections = parseHTMLStructured(await file.text()); }
-      else if (ext === "md") { setLoadMsg("Parsing Markdown…"); sections = parseMarkdownStructured(await file.text()); }
-      else { sections = detectTextStructure(await file.text()); }
+      // MD + plain-text branches dispatch through the parser worker so even
+      // a huge text file doesn't stall the loader animation. HTML stays on
+      // main thread for now (uses DOMParser; not worker-safe without a
+      // polyfill — Phase 3 territory if we want it moved).
+      else if (ext === "md") { setLoadMsg("Parsing Markdown…"); sections = await parseInWorker("parse-md", await file.text()); }
+      else { sections = await parseInWorker("parse-text", await file.text()); }
       const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
       // Empty-content guard: if the parser returned no readable text, the
       // file is most likely image-only (scanned PDF without OCR), encrypted,
