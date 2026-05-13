@@ -622,7 +622,7 @@ export default function App() {
           <button onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); setPanelOpen(false); }} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: t.surface, color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><FileText size={14} /> Try demo article</button>
           {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: t.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><Crown size={14} /> See Pro plans</button>}
         </div>
-        <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} isPro={sub.isPro} t={t} />
+        {user && <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} isPro={sub.isPro} t={t} />}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 40 }}>
           {Object.entries(THEMES).map(([key, th]) => {
             const free = isThemeFree(key);
