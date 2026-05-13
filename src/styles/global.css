@@ -1,5 +1,13 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Body inherits an accessibility-tuned typeface so anything not explicitly
+   styled lands on Atkinson Hyperlegible instead of the OS serif fallback.
+   Atkinson was designed by the Braille Institute for low-vision readers
+   and is the strongest brand-aligned default before the user picks a font. */
+body {
+  font-family: 'Atkinson Hyperlegible', system-ui, -apple-system, sans-serif;
+}
+
 /* ── Game button mechanic — all interactive buttons ── */
 button {
   -webkit-tap-highlight-color: transparent;
