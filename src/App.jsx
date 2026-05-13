@@ -606,10 +606,12 @@ export default function App() {
             duration={2}
           />
         </p>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 32, fontSize: 12, fontWeight: 600, color: t.fgSoft }}>
-          {sub.isPro ? <><Crown size={12} style={{ color: t.accent }} /><span style={{ color: t.accent }}>{sub.isTrial ? `Pro Trial — ${sub.trialDaysLeft} days left` : "Pro Plan"}</span></> : <><FileText size={12} /> {sub.uploadsUsed}/3 free docs used</>}
-          {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ background: t.accentSoft, border: "none", cursor: "pointer", color: t.accent, fontSize: 11, fontWeight: 650, padding: "2px 8px", borderRadius: 6, marginLeft: 4 }}>Upgrade</button>}
-        </div>
+        {(sub.isPro || sub.uploadsUsed > 0) && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 32, fontSize: 12, fontWeight: 600, color: t.fgSoft }}>
+            {sub.isPro ? <><Crown size={12} style={{ color: t.accent }} /><span style={{ color: t.accent }}>{sub.isTrial ? `Pro Trial — ${sub.trialDaysLeft} days left` : "Pro Plan"}</span></> : <><FileText size={12} /> {sub.uploadsUsed}/3 free docs used</>}
+            {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ background: t.accentSoft, border: "none", cursor: "pointer", color: t.accent, fontSize: 11, fontWeight: 650, padding: "2px 8px", borderRadius: 6, marginLeft: 4 }}>Upgrade</button>}
+          </div>
+        )}
         <div onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => !loading && fileRef.current?.click()} onMouseEnter={() => setHoverUpload(true)} onMouseLeave={() => setHoverUpload(false)} style={{ border: `2px dashed ${dragging || hoverUpload ? t.accent : t.border}`, borderRadius: 18, padding: "52px 32px", cursor: "pointer", background: dragging ? t.accentSoft : hoverUpload ? t.surfaceHover : t.surface, transition: "all 0.25s ease", marginBottom: 24, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", transform: hoverUpload ? "translateY(-2px)" : "translateY(0)", boxShadow: hoverUpload ? `0 8px 24px ${t.accent}15` : "none" }}>
           <Upload size={30} style={{ color: hoverUpload ? t.accent : t.icon, marginBottom: 14, transition: "color 0.2s ease" }} />
           <p style={{ fontSize: 15, fontWeight: 620, color: t.fg, marginBottom: 6 }}>Drop a file here or click to browse</p>
