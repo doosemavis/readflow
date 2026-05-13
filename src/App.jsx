@@ -101,6 +101,18 @@ export default function App() {
   const [loadMsg, setLoadMsg] = useState("");
   const [panelOpen, setPanelOpen] = useState(true);
 
+  // Loader overlay state. The raw `loading` boolean flips instantly; the overlay
+  // fades in/out around it so a fast parse doesn't flash and a finishing parse
+  // doesn't hard-cut to the reader before the reader has rendered underneath.
+  //   - `loaderShown` controls whether the overlay is mounted at all.
+  //   - `loaderOpaque` drives the CSS opacity transition (1 = covering, 0 = fading out).
+  //   - `loaderStartedAt` enforces a minimum visible duration so fast parses
+  //     don't flicker. Without this a ~80ms text-file parse would show the
+  //     loader for one frame and look like a glitch.
+  const [loaderShown, setLoaderShown] = useState(false);
+  const [loaderOpaque, setLoaderOpaque] = useState(false);
+  const loaderStartedAt = useRef(null);
+
   // ── Enhancement state ──
   const [neuroDiv, setNeuroDiv] = useState(false);
   const [neuroDivIntensity, setNeuroDivIntensity] = useState(0.42);
@@ -145,6 +157,37 @@ export default function App() {
 
   // Marketing funnel: record one landing_view per session on first mount.
   useEffect(() => { track("landing_view"); }, []);
+
+  // Loader fade-in/out transitions around `loading`. Timing budget:
+  //   FADE_MS         loader opacity transition (in and out)
+  //   MIN_VISIBLE_MS  shortest time the loader can be on screen, prevents
+  //                   sub-300ms parses from flashing
+  //   POST_LOAD_HOLD  delay after `loading` flips false before starting the
+  //                   fade-out — gives React one frame to commit the new
+  //                   reader tree underneath the still-opaque loader, so the
+  //                   fade reveals already-painted content instead of a
+  //                   half-rendered tree
+  // The handoff: loading=true → show + fade in → parse runs → loading=false →
+  // hold → fade out → unmount. Reader mounts during the hold/fade window.
+  useEffect(() => {
+    const FADE_MS = 300;
+    const MIN_VISIBLE_MS = 500;
+    const POST_LOAD_HOLD = 80;
+    if (loading) {
+      loaderStartedAt.current = performance.now();
+      setLoaderShown(true);
+      // Defer the opacity-1 flip to the next frame so the CSS transition
+      // observes a 0→1 change instead of mounting opaque.
+      const raf = requestAnimationFrame(() => setLoaderOpaque(true));
+      return () => cancelAnimationFrame(raf);
+    }
+    if (!loaderShown) return;
+    const elapsed = performance.now() - (loaderStartedAt.current || 0);
+    const holdFor = Math.max(POST_LOAD_HOLD, MIN_VISIBLE_MS - elapsed);
+    const fadeStartT = setTimeout(() => setLoaderOpaque(false), holdFor);
+    const unmountT = setTimeout(() => setLoaderShown(false), holdFor + FADE_MS);
+    return () => { clearTimeout(fadeStartT); clearTimeout(unmountT); };
+  }, [loading, loaderShown]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -576,10 +619,44 @@ export default function App() {
     </div>
   );
 
+  // Parse-loader overlay. Mounted whenever `loaderShown` is true, opacity
+  // animated via `loaderOpaque`. Position fixed so it covers whatever route
+  // is rendered underneath (landing during an upload; reader when loading a
+  // saved doc). pointer-events follows opacity so a fading-out overlay
+  // doesn't swallow clicks meant for the reader underneath.
+  const loaderOverlay = loaderShown && (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 200,
+        background: t.bg,
+        color: t.fg,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'DM Sans', sans-serif",
+        opacity: loaderOpaque ? 1 : 0,
+        transition: "opacity 300ms ease",
+        pointerEvents: loaderOpaque ? "auto" : "none",
+      }}
+    >
+      <BookLoader size={220} t={t} style={{ marginBottom: 20 }} />
+      <p style={{ fontSize: 16, fontWeight: 620, color: t.fg, marginBottom: 4 }}>{loadMsg}</p>
+      <p style={{ fontSize: 13, color: t.fgSoft }}>This may take a moment for large files</p>
+    </div>
+  );
+
   // ═══════════════════════════════════════════
   // LANDING PAGE
   // ═══════════════════════════════════════════
-  if (!text && !loading) return (
+  // Note: only `!text` gates the landing now (was `!text && !loading`). During
+  // a file upload, the landing stays mounted while the loader overlay covers
+  // it. When parse completes, the landing unmounts and the reader mounts; the
+  // overlay then fades out over the freshly-painted reader.
+  if (!text) return (
+    <>
     <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", fontFamily: "'DM Sans', sans-serif" }}>
       {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
       {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
@@ -651,23 +728,15 @@ export default function App() {
       </div>
       <Footer t={t} />
     </div>
-  );
-
-  // ═══════════════════════════════════════════
-  // FULL-SCREEN LOADING
-  // ═══════════════════════════════════════════
-  if (loading) return (
-    <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
-      <BookLoader size={220} t={t} style={{ marginBottom: 20 }} />
-      <p style={{ fontSize: 16, fontWeight: 620, color: t.fg, marginBottom: 4 }}>{loadMsg}</p>
-      <p style={{ fontSize: 13, color: t.fgSoft }}>This may take a moment for large files</p>
-    </div>
+    {loaderOverlay}
+    </>
   );
 
   // ═══════════════════════════════════════════
   // READER VIEW
   // ═══════════════════════════════════════════
   return (
+    <>
     <div style={{ height: "100vh", overflow: "hidden", background: t.bg, color: t.fg, fontFamily: "'DM Sans', sans-serif", display: "flex", flexDirection: "column" }}>
       {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
       {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
@@ -944,5 +1013,7 @@ export default function App() {
       </div>
       </div>
     </div>
+    {loaderOverlay}
+    </>
   );
 }
