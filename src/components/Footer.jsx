@@ -24,7 +24,11 @@ export default function Footer({ t }) {
       <footer
         style={{
           borderTop: `1px solid ${t.borderSoft}`,
-          padding: "16px 24px",
+          // Horizontal padding only. The 44px tap-target padding on each link
+          // (Privacy/Terms/Contact) defines the footer's height, so adding
+          // wrapper vertical padding on top of that doubles the visual
+          // whitespace. Footer ends up ≈44px tall instead of ≈76px.
+          padding: "0 24px",
           display: "flex",
           flexWrap: "wrap",
           alignItems: "center",
