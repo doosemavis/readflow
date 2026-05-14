@@ -18,6 +18,11 @@ const LINK_RESET = { color: "inherit", textDecoration: "none", background: "none
 export default function Footer({ t }) {
   const year = new Date().getFullYear();
   const [showContact, setShowContact] = useState(false);
+  // Tracks which footer link is hovered so we can show a link-style
+  // underline. Inline styles can't define `:hover`, hence the state.
+  // Underline color uses currentColor (the link's `color`, which is
+  // t.accent from the wrapper), so it always matches the text.
+  const [hoveredKey, setHoveredKey] = useState(null);
 
   return (
     <>
@@ -48,12 +53,24 @@ export default function Footer({ t }) {
       >
         <span>© {year} ReadFlow</span>
         <nav style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <Link to="/privacy" style={LINK_RESET}>Privacy</Link>
-          <Link to="/terms" style={LINK_RESET}>Terms</Link>
+          <Link
+            to="/privacy"
+            onMouseEnter={() => setHoveredKey("privacy")}
+            onMouseLeave={() => setHoveredKey(null)}
+            style={{ ...LINK_RESET, textDecoration: hoveredKey === "privacy" ? "underline" : "none" }}
+          >Privacy</Link>
+          <Link
+            to="/terms"
+            onMouseEnter={() => setHoveredKey("terms")}
+            onMouseLeave={() => setHoveredKey(null)}
+            style={{ ...LINK_RESET, textDecoration: hoveredKey === "terms" ? "underline" : "none" }}
+          >Terms</Link>
           <a
             href="#contact"
             onClick={(e) => { e.preventDefault(); setShowContact(true); }}
-            style={{ color: t.accent, textDecoration: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", padding: "13px 12px", display: "inline-block" }}
+            onMouseEnter={() => setHoveredKey("contact")}
+            onMouseLeave={() => setHoveredKey(null)}
+            style={{ color: t.accent, textDecoration: hoveredKey === "contact" ? "underline" : "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", padding: "13px 12px", display: "inline-block" }}
           >
             Contact
           </a>
