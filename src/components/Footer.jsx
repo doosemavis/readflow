@@ -35,18 +35,25 @@ export default function Footer({ t }) {
           justifyContent: "space-between",
           gap: 12,
           fontSize: 12,
-          color: t.fgSoft,
+          // Matches the "Try demo article" CTA color (t.accent). Footer text
+          // reads on-brand instead of muted-gray, and the brand color stays
+          // in the user's eye even at the bottom of the page. Updates on
+          // theme change automatically — `t` is a fresh object from
+          // useThemePreference each theme switch, so React re-renders with
+          // the new t.accent. No key={theme} remount needed for plain color
+          // bindings (that trick is only for re-firing once-only effects).
+          color: t.accent,
           fontFamily: "'DM Sans', sans-serif",
         }}
       >
         <span>© {year} ReadFlow</span>
         <nav style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <Link to="/privacy" style={{ ...LINK_RESET, color: t.fgSoft }}>Privacy</Link>
-          <Link to="/terms" style={{ ...LINK_RESET, color: t.fgSoft }}>Terms</Link>
+          <Link to="/privacy" style={LINK_RESET}>Privacy</Link>
+          <Link to="/terms" style={LINK_RESET}>Terms</Link>
           <a
             href="#contact"
             onClick={(e) => { e.preventDefault(); setShowContact(true); }}
-            style={{ color: t.fgSoft, textDecoration: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", padding: "13px 12px", display: "inline-block" }}
+            style={{ color: t.accent, textDecoration: "none", fontSize: 12, fontFamily: "'DM Sans', sans-serif", cursor: "pointer", padding: "13px 12px", display: "inline-block" }}
           >
             Contact
           </a>
