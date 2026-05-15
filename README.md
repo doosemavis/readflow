@@ -1,4 +1,4 @@
-# ReadFlow — Project Architecture
+# TailorMyText — Project Architecture
 
 ## Setup
 ```bash
