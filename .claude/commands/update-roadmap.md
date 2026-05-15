@@ -1,4 +1,4 @@
-Sweep recent work and propose updates to the ReadFlow roadmap table (`public.roadmap_items` in Supabase, surfaced at `/admin/roadmap`).
+Sweep recent work and propose updates to the TailorMyText roadmap table (`public.roadmap_items` in Supabase, surfaced at `/admin/roadmap`).
 
 ## What to gather
 
