@@ -14,7 +14,7 @@ No test runner or linter is currently configured.
 
 ## Architecture
 
-**ReadFlow** is a React + Vite single-page app for reading documents with adaptive typography and visual accessibility aids.
+**TailorMyText** is a React + Vite single-page app for reading documents with adaptive typography and visual accessibility aids.
 
 ### State Management
 
@@ -80,8 +80,8 @@ Self-hosted, anonymous-safe funnel built on a single Supabase table. No third-pa
 When promoting from local dev → production hosting (Vercel / Netlify / etc.), update these in the Supabase Dashboard. The codebase has no environment-specific URLs hardcoded (besides `import.meta.env.VITE_SUPABASE_*`), so all URL configuration lives in Supabase + the host's env-var panel.
 
 **Supabase Dashboard → Authentication → URL Configuration:**
-- **Site URL**: set to the production domain (e.g. `https://readflow.app`). This is the default redirect target Supabase uses for password-reset and email-verification links.
-- **Redirect URLs (allowlist)**: add the production domain plus any specific paths used by OAuth callbacks. Wildcard suffix `https://readflow.app/*` covers all paths cleanly. Keep `http://localhost:5173/*` in the list while developing in parallel.
+- **Site URL**: set to the production domain (`https://tailormytext.com`). This is the default redirect target Supabase uses for password-reset and email-verification links.
+- **Redirect URLs (allowlist)**: add the production domain plus any specific paths used by OAuth callbacks. Wildcard suffix `https://tailormytext.com/*` covers all paths cleanly. Keep `http://localhost:5173/*` in the list while developing in parallel.
 
 **Supabase Dashboard → Authentication → Email Templates:**
 - Customize the "Confirm signup", "Reset password", and "Magic Link" templates with the production sender name + branding. The default templates use generic Supabase wording.

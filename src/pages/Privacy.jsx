@@ -22,10 +22,10 @@ export default function Privacy() {
   return (
     <LegalLayout t={t} title="Privacy Policy" lastUpdated={LAST_UPDATED}>
       <p>
-        ReadFlow ("we," "us," "our") operates the website at <a href="https://myreadflow.com" style={{ color: t.accent }}>myreadflow.com</a> (the "Service"). This Privacy Policy explains what data we collect, why we collect it, who we share it with, and the rights you have over it.
+        TailorMyText ("we," "us," "our") operates the website at <a href="https://tailormytext.com" style={{ color: t.accent }}>tailormytext.com</a> (the "Service"). This Privacy Policy explains what data we collect, why we collect it, who we share it with, and the rights you have over it.
       </p>
       <p>
-        We've tried to write this in plain English. If anything here is unclear, email us at <a href="mailto:support@myreadflow.com" style={{ color: t.accent }}>support@myreadflow.com</a>.
+        We've tried to write this in plain English. If anything here is unclear, email us at <a href="mailto:support@tailormytext.com" style={{ color: t.accent }}>support@tailormytext.com</a>.
       </p>
 
       <h2>1. What We Collect</h2>
@@ -111,7 +111,7 @@ export default function Privacy() {
 
       <h2>8. Children's Privacy</h2>
       <p>
-        ReadFlow is not directed at children under 13 (or 16 in the EU). We do not knowingly collect data from children in those age groups. If you believe a child has provided data to us, contact <a href="mailto:support@myreadflow.com" style={{ color: t.accent }}>support@myreadflow.com</a>.
+        TailorMyText is not directed at children under 13 (or 16 in the EU). We do not knowingly collect data from children in those age groups. If you believe a child has provided data to us, contact <a href="mailto:support@tailormytext.com" style={{ color: t.accent }}>support@tailormytext.com</a>.
       </p>
 
       <h2>9. Changes To This Policy</h2>
@@ -121,7 +121,7 @@ export default function Privacy() {
 
       <h2>10. Contact</h2>
       <p>
-        Questions about this Privacy Policy? Email <a href="mailto:support@myreadflow.com" style={{ color: t.accent }}>support@myreadflow.com</a>.
+        Questions about this Privacy Policy? Email <a href="mailto:support@tailormytext.com" style={{ color: t.accent }}>support@tailormytext.com</a>.
       </p>
     </LegalLayout>
   );

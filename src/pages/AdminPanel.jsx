@@ -210,7 +210,7 @@ function GrantProTab({ t }) {
       <div style={{ padding: "14px 16px", borderRadius: 12, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: t.fg, fontFamily: "'DM Sans', sans-serif", marginBottom: 8 }}>Grant Pro access</div>
         <p style={{ fontSize: 12, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", margin: "0 0 12px", lineHeight: 1.5 }}>
-          If the email already has a ReadFlow account, the grant applies immediately. Otherwise it's queued and auto-applies the moment they sign up. Grants stack and don't require Stripe.
+          If the email already has a TailorMyText account, the grant applies immediately. Otherwise it's queued and auto-applies the moment they sign up. Grants stack and don't require Stripe.
         </p>
         <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
           <input
@@ -643,7 +643,7 @@ export default function AdminPanel() {
           <div style={{ width: 32, height: 32, borderRadius: 8, background: t.accentSoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <BookOpen size={16} style={{ color: t.accent, transform: "translateY(1px)" }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>ReadFlow</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>TailorMyText</span>
         </Link>
         <Link to="/" style={{ ...LINK_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: t.fgSoft, padding: "6px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: "transparent" }}>
           <ArrowLeft size={13} /> Back to app

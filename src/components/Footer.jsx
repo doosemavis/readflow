@@ -51,7 +51,7 @@ export default function Footer({ t }) {
           fontFamily: "'DM Sans', sans-serif",
         }}
       >
-        <span>© {year} ReadFlow</span>
+        <span>© {year} TailorMyText</span>
         <nav style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <Link
             to="/privacy"

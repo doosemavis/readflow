@@ -21,7 +21,7 @@ export default function PricingModal({ onClose, onSelectPlan, hasUsedTrial, t })
         >
           <div style={{ padding: "28px 32px 20px", borderBottom: `1px solid ${t.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
-              <Dialog.Title style={{ fontSize: 24, fontWeight: 740, color: t.fg, margin: 0, letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>Upgrade to ReadFlow Pro</Dialog.Title>
+              <Dialog.Title style={{ fontSize: 24, fontWeight: 740, color: t.fg, margin: 0, letterSpacing: "-0.02em", fontFamily: "'DM Sans', sans-serif" }}>Upgrade to TailorMyText Pro</Dialog.Title>
               <p style={{ fontSize: 14, color: t.fgSoft, margin: "6px 0 0" }}>Unlimited documents, all formats, one reader built for you.</p>
             </div>
             <Dialog.Close asChild>

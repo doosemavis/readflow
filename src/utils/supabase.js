@@ -4,7 +4,7 @@ const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!url || !key) {
-  console.warn("ReadFlow: Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY — auth will not work.");
+  console.warn("TailorMyText: Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY — auth will not work.");
 }
 
 // autoRefreshToken: false because the SDK's silent token refresh hangs/fails

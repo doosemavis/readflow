@@ -15,7 +15,7 @@ import "./styles/global.css";
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary
-      title="ReadFlow couldn't start"
+      title="TailorMyText couldn't start"
       description="An unexpected error broke the app. Reset to try again — your saved documents are safe."
       onReset={() => window.location.reload()}
     >

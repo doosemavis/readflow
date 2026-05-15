@@ -22,10 +22,10 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 
 // Bump if the production domain changes. Kept as a constant rather than
-// env var to keep the function self-contained — DNS for send.myreadflow.com
+// env var to keep the function self-contained — DNS for send.tailormytext.com
 // is what's actually verified at Resend.
-const FROM_ADDRESS = "ReadFlow <gifts@send.myreadflow.com>";
-const APP_URL = "https://myreadflow.com";
+const FROM_ADDRESS = "TailorMyText <gifts@send.tailormytext.com>";
+const APP_URL = "https://tailormytext.com";
 
 interface GrantEmailPayload {
   to: string;
@@ -50,19 +50,19 @@ function buildEmail({ to, kind, months }: GrantEmailPayload) {
 
   if (kind === "queued") {
     return {
-      subject: `You've been gifted ${monthsLabel} of ReadFlow Pro`,
+      subject: `You've been gifted ${monthsLabel} of TailorMyText Pro`,
       text:
-`A ReadFlow Pro gift is waiting for you.
+`A TailorMyText Pro gift is waiting for you.
 
-Someone just gifted you ${monthsLabel} of ReadFlow Pro — a reading tool with adaptive typography, focus aids, and color-tuned overlays designed to make reading easier.
+Someone just gifted you ${monthsLabel} of TailorMyText Pro — a reading tool with adaptive typography, focus aids, and color-tuned overlays designed to make reading easier.
 
 Create your account at ${giftUrl} using this email address and your gift will be applied automatically the moment you sign up.
 
-— The ReadFlow team`,
+— The TailorMyText team`,
       html: renderHtml({
         url: giftUrl,
-        headline: "A ReadFlow Pro gift is waiting for you",
-        body: `Someone just gifted you <strong>${monthsLabel}</strong> of ReadFlow Pro — a reading tool with adaptive typography, focus aids, and color-tuned overlays designed to make reading easier.<br><br>Create your account using this email address and your gift will be applied automatically the moment you sign up.`,
+        headline: "A TailorMyText Pro gift is waiting for you",
+        body: `Someone just gifted you <strong>${monthsLabel}</strong> of TailorMyText Pro — a reading tool with adaptive typography, focus aids, and color-tuned overlays designed to make reading easier.<br><br>Create your account using this email address and your gift will be applied automatically the moment you sign up.`,
         ctaLabel: "Create your account →",
       }),
     };
@@ -70,20 +70,20 @@ Create your account at ${giftUrl} using this email address and your gift will be
 
   // kind === "applied"
   return {
-    subject: `${monthsLabel} of ReadFlow Pro added to your account`,
+    subject: `${monthsLabel} of TailorMyText Pro added to your account`,
     text:
-`Your ReadFlow Pro gift is active.
+`Your TailorMyText Pro gift is active.
 
-${monthsLabel} of ReadFlow Pro have just been added to your account. Open ReadFlow to keep reading with the full feature set.
+${monthsLabel} of TailorMyText Pro have just been added to your account. Open TailorMyText to keep reading with the full feature set.
 
 ${giftUrl}
 
-— The ReadFlow team`,
+— The TailorMyText team`,
     html: renderHtml({
       url: giftUrl,
-      headline: "Your ReadFlow Pro gift is active",
-      body: `<strong>${monthsLabel}</strong> of ReadFlow Pro have just been added to your account. Open ReadFlow to keep reading with the full feature set.`,
-      ctaLabel: "Open ReadFlow →",
+      headline: "Your TailorMyText Pro gift is active",
+      body: `<strong>${monthsLabel}</strong> of TailorMyText Pro have just been added to your account. Open TailorMyText to keep reading with the full feature set.`,
+      ctaLabel: "Open TailorMyText →",
     }),
   };
 }
@@ -102,7 +102,7 @@ function renderHtml({ url, headline, body, ctaLabel }: { url: string; headline: 
       <td align="center" style="padding:40px 16px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,0.04);">
           <tr><td style="padding:32px 32px 0 32px;">
-            <div style="display:inline-block;padding:8px 14px;border-radius:999px;background:#EADFCB;color:#8A6628;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">ReadFlow</div>
+            <div style="display:inline-block;padding:8px 14px;border-radius:999px;background:#EADFCB;color:#8A6628;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">TailorMyText</div>
           </td></tr>
           <tr><td style="padding:24px 32px 8px 32px;">
             <h1 style="margin:0;font-size:24px;font-weight:740;letter-spacing:-0.01em;color:#2A2A2A;line-height:1.25;">${headline}</h1>

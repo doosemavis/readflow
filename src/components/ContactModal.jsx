@@ -2,7 +2,7 @@ import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X, Mail, Copy, Check, ExternalLink } from "lucide-react";
 
-const SUPPORT_EMAIL = "support@myreadflow.com";
+const SUPPORT_EMAIL = "support@tailormytext.com";
 
 const OVERLAY = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", zIndex: 1010 };
 

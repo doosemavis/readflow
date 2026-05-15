@@ -9,7 +9,8 @@ entities.json
 
 # Claude Desktop context bundle — kept local; uploaded to Claude Projects
 # manually. Not pushed to GitHub or deployed.
-READFLOW_CONTEXT.md
+TAILORMYTEXT_CONTEXT.md
 
 # Strategic / launch planning notes — local reference only.
-READFLOW_LAUNCH_PLAN.md
+TAILORMYTEXT_LAUNCH_PLAN.md
+.gstack/

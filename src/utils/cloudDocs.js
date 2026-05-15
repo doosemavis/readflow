@@ -1,7 +1,7 @@
 // Supabase-backed document storage and recent-docs index.
 //
 // Files live in the `documents` bucket at path `{user_id}/{doc_id}.json`,
-// shaped as the JSON `{ sections, text }` payload that ReadFlow already
+// shaped as the JSON `{ sections, text }` payload that TailorMyText already
 // builds. The recent-docs index lives in the `recent_docs` table; RLS
 // policies enforce per-user isolation on both surfaces (see the migration
 // in supabase/migrations/).

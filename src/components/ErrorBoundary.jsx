@@ -55,7 +55,7 @@ export default class ErrorBoundary extends Component {
             {this.props.title ?? "Something went wrong"}
           </h2>
           <p style={{ fontSize: 14, color: t.fgSoft, margin: 0, lineHeight: 1.55 }}>
-            {this.props.description ?? "ReadFlow hit an unexpected error rendering this. You can reset and try again."}
+            {this.props.description ?? "TailorMyText hit an unexpected error rendering this. You can reset and try again."}
           </p>
         </div>
         <button

@@ -26,7 +26,7 @@ export default function PostDeletionLockoutBanner({ lockoutUntil, onSubscribe })
     >
       <Lock size={16} style={{ flexShrink: 0 }} />
       <span style={{ flex: 1, lineHeight: 1.4 }}>
-        Welcome back. Free-tier benefits are paused until <strong>{formatDate(lockoutUntil)}</strong> because this account was previously deleted. Subscribe to use ReadFlow now.
+        Welcome back. Free-tier benefits are paused until <strong>{formatDate(lockoutUntil)}</strong> because this account was previously deleted. Subscribe to use TailorMyText now.
       </span>
       <button
         onClick={onSubscribe}

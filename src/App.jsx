@@ -24,7 +24,7 @@ function mapParserErrorToMessage(ext, err) {
   }
   if (ext === "pdf") {
     if (raw.includes("password") || raw.includes("encrypt")) {
-      return "This PDF is password-protected. ReadFlow can't open encrypted PDFs.";
+      return "This PDF is password-protected. TailorMyText can't open encrypted PDFs.";
     }
     if (raw.includes("invalid") || raw.includes("corrupt") || raw.includes("malformed")) {
       return "This PDF appears corrupted. Try re-downloading it from the source.";
@@ -214,13 +214,13 @@ export default function App() {
         showToast(`This gift is for ${giftEmail}. Sign out to redeem on that account.`, "info", 10000);
         stripUrl();
       } else if (recipientMatchesUser) {
-        showToast("🎁 Your ReadFlow Pro gift is active!", "success", 8000);
+        showToast("🎁 Your TailorMyText Pro gift is active!", "success", 8000);
         stripUrl();
       } else if (giftStatus === "applied") {
         showToast(`🎁 Welcome back — sign in with ${giftEmail} to access your Pro gift.`, "info", 9000);
         setPendingGift({ email: giftEmail });
       } else {
-        showToast(`🎁 You've been gifted ReadFlow Pro. Sign up with ${giftEmail} to redeem.`, "info", 9000);
+        showToast(`🎁 You've been gifted TailorMyText Pro. Sign up with ${giftEmail} to redeem.`, "info", 9000);
         setPendingGift({ email: giftEmail });
       }
       return;
@@ -229,7 +229,7 @@ export default function App() {
     // Follow-up: a pending gift is waiting for the user to sign in. If they
     // just authenticated as the recipient, fire the celebration toast.
     if (pendingGift && user?.email?.toLowerCase() === pendingGift.email.toLowerCase()) {
-      showToast("🎁 Your ReadFlow Pro gift is active!", "success", 8000);
+      showToast("🎁 Your TailorMyText Pro gift is active!", "success", 8000);
       setPendingGift(null);
       stripUrl();
     }
@@ -465,7 +465,7 @@ export default function App() {
       // branch and `.text()` decodes its binary bytes as UTF-8 garbage —
       // user sees a screen of gibberish instead of a clear error.
       if (!SUPPORTED_EXTS.has(ext)) {
-        throw new Error(`ReadFlow doesn't support .${ext} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, HTML, JSON).`);
+        throw new Error(`TailorMyText doesn't support .${ext} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, HTML, JSON).`);
       }
       if (ext === "pdf") { setLoadMsg("Loading PDF engine…"); sections = await parsePDF(file); }
       else if (ext === "epub") { setLoadMsg("Unpacking EPUB…"); sections = await parseEPUB(file); }
@@ -619,7 +619,7 @@ export default function App() {
   // ═══════════════════════════════════════════
   if (!sub.loaded) return (
     <div style={{ minHeight: "100vh", background: t.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}><BookLoader size={160} t={t} style={{ marginBottom: 14 }} /><p style={{ fontSize: 14, color: t.fgSoft }}>Loading ReadFlow…</p></div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}><BookLoader size={160} t={t} style={{ marginBottom: 14 }} /><p style={{ fontSize: 14, color: t.fgSoft }}>Loading TailorMyText…</p></div>
     </div>
   );
 
@@ -679,7 +679,7 @@ export default function App() {
              exercises it (clicking a theme dot). */}
           <DiaTextReveal
             key={theme}
-            text="ReadFlow"
+            text="TailorMyText"
             colors={getRevealColors(theme)}
             textColor={t.fg}
             duration={2}
@@ -926,7 +926,7 @@ export default function App() {
                 font swap took effect. */}
             <DiaTextReveal
               key={fontFamily}
-              text="ReadFlow"
+              text="TailorMyText"
               colors={getRevealColors(theme)}
               textColor={t.fg}
               duration={1.5}

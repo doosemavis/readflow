@@ -7,7 +7,7 @@ import { detectTextStructure } from "./detectStructure";
 // typically small (<5MB) and the parse runs fast (~50-200ms on a typical
 // memo), so the cost-benefit of a parse5-based worker rewrite doesn't
 // justify the effort right now. Tracked alongside EPUB as a deferred
-// optimization in READFLOW_LAUNCH_PLAN.md.
+// optimization in TAILORMYTEXT_LAUNCH_PLAN.md.
 
 export async function parseDOCX(file) {
   const buf = await file.arrayBuffer();

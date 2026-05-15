@@ -14,7 +14,7 @@ import { loadScript } from "./scriptLoader";
 // the loader's ~50ms stutter threshold. PDF analysis was the big offender
 // (moved to worker in Phase 3, src/workers/pdfAnalysis.js). EPUB stays
 // main-thread until measured stutter on real EPUBs justifies the parse5
-// rewrite. Tracked as a deferred TODO in READFLOW_LAUNCH_PLAN.md.
+// rewrite. Tracked as a deferred TODO in TAILORMYTEXT_LAUNCH_PLAN.md.
 
 export async function parseEPUB(file) {
   await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");

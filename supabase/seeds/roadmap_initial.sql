@@ -30,7 +30,7 @@ WITH rows(title, description, status, category, eta, sort_order) AS (
    'planned'::public.roadmap_status, 'Branding', 'Soon', 4),
 
   ('Custom support email pipeline',
-   'Resend SMTP + Gmail Send-As so support@myreadflow.com can both send and receive properly, instead of relying on Cloudflare Email Routing alone for inbound.',
+   'Resend SMTP + Gmail Send-As so support@tailormytext.com can both send and receive properly, instead of relying on Cloudflare Email Routing alone for inbound.',
    'planned'::public.roadmap_status, 'Email', 'TBD', 5),
 
   -- ── Shipped (most recent first) ──────────────────────────────────────

@@ -19,15 +19,15 @@ export default function Terms() {
   return (
     <LegalLayout t={t} title="Terms Of Service" lastUpdated={LAST_UPDATED}>
       <p>
-        Welcome to ReadFlow. By using <a href="https://myreadflow.com" style={{ color: t.accent }}>myreadflow.com</a> (the "Service") you agree to these Terms of Service. If you don't agree, please don't use the Service.
+        Welcome to TailorMyText. By using <a href="https://tailormytext.com" style={{ color: t.accent }}>tailormytext.com</a> (the "Service") you agree to these Terms of Service. If you don't agree, please don't use the Service.
       </p>
       <p>
-        We've tried to write these in plain English. If anything is unclear, email <a href="mailto:support@myreadflow.com" style={{ color: t.accent }}>support@myreadflow.com</a>.
+        We've tried to write these in plain English. If anything is unclear, email <a href="mailto:support@tailormytext.com" style={{ color: t.accent }}>support@tailormytext.com</a>.
       </p>
 
       <h2>1. Who We Are</h2>
       <p>
-        ReadFlow is operated as an independent indie SaaS. Throughout these Terms, "we," "us," and "our" refer to the operator of ReadFlow.
+        TailorMyText is operated as an independent indie SaaS. Throughout these Terms, "we," "us," and "our" refer to the operator of TailorMyText.
       </p>
 
       <h2>2. Your Account</h2>
@@ -41,7 +41,7 @@ export default function Terms() {
       <h2>3. What You Can Do</h2>
       <ul>
         <li>Upload documents you have the legal right to read (you own them, or have permission, or they're public domain).</li>
-        <li>Use ReadFlow's reading aids — typography controls, themes, focus mode, reading guide, hue tracking — for your personal reading.</li>
+        <li>Use TailorMyText's reading aids — typography controls, themes, focus mode, reading guide, hue tracking — for your personal reading.</li>
         <li>Subscribe to Pro for additional features as described on the pricing page.</li>
       </ul>
 
@@ -50,7 +50,7 @@ export default function Terms() {
         <li>Upload content you don't have the legal right to use (pirated books, copyrighted material without permission, illegal content).</li>
         <li>Try to bypass payment, abuse the free trial offer (one trial per email — see our anti-abuse logic in the Privacy Policy), or otherwise game the Service.</li>
         <li>Reverse-engineer, scrape, or attempt to break into the Service or other users' accounts.</li>
-        <li>Use ReadFlow to harass others, distribute malware, or for any unlawful purpose.</li>
+        <li>Use TailorMyText to harass others, distribute malware, or for any unlawful purpose.</li>
         <li>Resell or redistribute the Service without our written permission.</li>
       </ul>
 
@@ -71,7 +71,7 @@ export default function Terms() {
       <ul>
         <li>Cancel anytime via Settings → Manage subscription. Cancellation during your trial takes effect immediately and you won't be charged. Cancellation of an active Pro subscription takes effect at the end of the current billing period — you keep Pro access until then, and you won't be charged again.</li>
         <li><strong>If you forget to cancel before your 14-day trial ends, you'll be charged automatically</strong> on day 14 (Stripe sends a reminder email 7 days before this happens). The first post-trial charge is non-refundable. You can still cancel after being charged — your subscription will end at the end of that billing period and you won't be charged again — but the initial charge stands.</li>
-        <li>We do <strong>not</strong> offer prorated refunds for partial billing periods, accidental renewals, or unused subscription time. If something has gone seriously wrong (a bug we caused, a duplicate charge, etc.), email <a href="mailto:support@myreadflow.com" style={{ color: t.accent }}>support@myreadflow.com</a> and we'll review case-by-case.</li>
+        <li>We do <strong>not</strong> offer prorated refunds for partial billing periods, accidental renewals, or unused subscription time. If something has gone seriously wrong (a bug we caused, a duplicate charge, etc.), email <a href="mailto:support@tailormytext.com" style={{ color: t.accent }}>support@tailormytext.com</a> and we'll review case-by-case.</li>
         <li><strong>EU / UK consumers</strong> have a statutory 14-day right of withdrawal under EU consumer law. To exercise it, email us within 14 days of your first paid charge for a full refund.</li>
       </ul>
 
@@ -80,7 +80,7 @@ export default function Terms() {
         <li><strong>Free tier:</strong> uploaded documents auto-delete <strong>7 days</strong> after last access. We do this to protect your privacy and limit our storage costs.</li>
         <li><strong>Pro tier:</strong> uploaded documents auto-delete <strong>30 days</strong> after last access.</li>
         <li>Open a document at any point to reset its TTL clock.</li>
-        <li>You're responsible for keeping your own backups. ReadFlow is a reading tool, not a long-term storage service.</li>
+        <li>You're responsible for keeping your own backups. TailorMyText is a reading tool, not a long-term storage service.</li>
       </ul>
 
       <h2>7. Account Deletion + Post-Deletion Lockout</h2>
@@ -98,7 +98,7 @@ export default function Terms() {
       </p>
       <h3>Ours</h3>
       <p>
-        The ReadFlow brand, design, and code are our intellectual property. You can't copy, redistribute, or create derivative works without permission.
+        The TailorMyText brand, design, and code are our intellectual property. You can't copy, redistribute, or create derivative works without permission.
       </p>
 
       <h2>9. Service Availability</h2>
@@ -112,7 +112,7 @@ export default function Terms() {
         The Service is provided <strong>"as is"</strong> without warranties of any kind, express or implied. We don't guarantee the Service will meet your needs, be error-free, or be available without interruption.
       </p>
       <p>
-        ReadFlow is a reading enhancement tool. It is <strong>not</strong> a substitute for professional medical, educational, or accessibility advice. If you have specific reading-related needs, please consult a qualified professional.
+        TailorMyText is a reading enhancement tool. It is <strong>not</strong> a substitute for professional medical, educational, or accessibility advice. If you have specific reading-related needs, please consult a qualified professional.
       </p>
 
       <h2>11. Limitation Of Liability</h2>
@@ -137,7 +137,7 @@ export default function Terms() {
 
       <h2>15. Contact</h2>
       <p>
-        Questions about these Terms? Email <a href="mailto:support@myreadflow.com" style={{ color: t.accent }}>support@myreadflow.com</a>.
+        Questions about these Terms? Email <a href="mailto:support@tailormytext.com" style={{ color: t.accent }}>support@tailormytext.com</a>.
       </p>
     </LegalLayout>
   );

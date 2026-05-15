@@ -18,7 +18,7 @@ export default function LegalLayout({ t, title, lastUpdated, children }) {
           <div style={{ width: 32, height: 32, borderRadius: 8, background: t.accentSoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <BookOpen size={16} style={{ color: t.accent, transform: "translateY(1px)" }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>ReadFlow</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>TailorMyText</span>
         </Link>
         <Link to="/" style={{ ...LINK_STYLE_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: t.fgSoft, padding: "6px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: "transparent" }}>
           <ArrowLeft size={13} /> Back to app

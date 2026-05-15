@@ -1,6 +1,6 @@
-# ReadFlow — App Capabilities
+# TailorMyText — App Capabilities
 
-ReadFlow is a reading app for people whose brains process text differently — dyslexia, ADHD, low vision, sensory overload, or eye fatigue at the end of a long day. Bring a document, tune the page until the words feel easy, read.
+TailorMyText is a reading app for people whose brains process text differently — dyslexia, ADHD, low vision, sensory overload, or eye fatigue at the end of a long day. Bring a document, tune the page until the words feel easy, read.
 
 Accessibility is the product, not a feature.
 
@@ -117,6 +117,6 @@ For deeper architecture notes see `CLAUDE.md`.
 ## Status
 
 - Pre-launch as of 2026-05-10.
-- Live deployment at `myreadflow.com`, not yet publicly shared.
+- Live deployment at `tailormytext.com`, not yet publicly shared.
 - One historical canceled subscription on file (founder live-test + immediate refund).
 - Marketing funnel infrastructure in place; awaiting first organic traffic to populate.

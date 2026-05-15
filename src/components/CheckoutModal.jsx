@@ -62,7 +62,7 @@ export default function CheckoutModal({ billing, onClose, t }) {
                 <BookOpen size={18} style={{ color: t.accent }} />
               </div>
               <div>
-                <Dialog.Title style={{ fontSize: 15, fontWeight: 700, color: t.fg, margin: 0, fontFamily: "'DM Sans', sans-serif" }}>ReadFlow Pro</Dialog.Title>
+                <Dialog.Title style={{ fontSize: 15, fontWeight: 700, color: t.fg, margin: 0, fontFamily: "'DM Sans', sans-serif" }}>TailorMyText Pro</Dialog.Title>
                 <p style={{ fontSize: 12, color: t.fgSoft, margin: 0 }}>{billing === "monthly" ? "Monthly" : "Annual"} subscription</p>
               </div>
             </div>

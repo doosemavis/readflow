@@ -1,4 +1,4 @@
-# ReadFlow — Project Architecture
+# TailorMyText — Project Architecture
 
 ## Setup
 ```bash
@@ -9,7 +9,7 @@ npm run dev
 ## File Structure (Single Responsibility Principle)
 
 ```
-readflow/
+tailormytext/
 ├── index.html                    # Entry HTML
 ├── package.json                  # Dependencies & scripts
 ├── vite.config.js                # Vite + React plugin

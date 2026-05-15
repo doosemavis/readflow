@@ -162,10 +162,10 @@ export default function Account() {
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
       if (format === "json") {
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-        downloadBlob(blob, `readflow-export-${stamp}.json`);
+        downloadBlob(blob, `tailormytext-export-${stamp}.json`);
       } else {
         const blob = new Blob([buildCsv(exportData)], { type: "text/csv;charset=utf-8" });
-        downloadBlob(blob, `readflow-export-${stamp}.csv`);
+        downloadBlob(blob, `tailormytext-export-${stamp}.csv`);
       }
       showToast(`Exported as ${format.toUpperCase()}`, "success");
     } catch (err) {
@@ -197,7 +197,7 @@ export default function Account() {
           <div style={{ width: 32, height: 32, borderRadius: 8, background: t.accentSoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <BookOpen size={16} style={{ color: t.accent, transform: "translateY(1px)" }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>ReadFlow</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>TailorMyText</span>
         </Link>
         <Link to="/" style={{ ...LINK_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: t.fgSoft, padding: "6px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: "transparent" }}>
           <ArrowLeft size={13} /> Back to app
@@ -231,7 +231,7 @@ export default function Account() {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <BadgeCheck size={14} style={{ color: t.icon, flexShrink: 0 }} />
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em" }}>ReadFlow role</div>
+                  <div style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em" }}>TailorMyText role</div>
                   <div style={{ fontSize: 13, color: t.fg, fontWeight: 600, marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     {isOwner && (
                       <>
