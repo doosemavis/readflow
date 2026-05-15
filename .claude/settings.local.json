@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Library/Frameworks/Python.framework/Versions/3.14/bin/mempalace mine /Users/moosedavis/.claude/projects/-Users-moosedavis-dev-tailormytext/ --mode convos --wing readflow >> /tmp/mempalace-mine.log 2>&1",
+            "command": "/Library/Frameworks/Python.framework/Versions/3.14/bin/mempalace mine /Users/moosedavis/.claude/projects/-Users-moosedavis-dev-tailormytext/ --mode convos --wing tailormytext >> /tmp/mempalace-mine.log 2>&1",
             "statusMessage": "MemPalace: indexing session",
             "async": true
           }
