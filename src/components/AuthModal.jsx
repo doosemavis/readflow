@@ -261,7 +261,7 @@ export default function AuthModal({ onClose, t, initialView = "login" }) {
             </div>
             {!isRecoveryMode && (
               <Dialog.Close asChild>
-                <button aria-label="Close" className="rf-static" style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: "var(--tmt-ink-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "none" }}>
+                <button aria-label="Close" style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: "var(--tmt-ink-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <X size={16} strokeWidth={2} />
                 </button>
               </Dialog.Close>
