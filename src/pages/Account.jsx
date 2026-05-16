@@ -200,8 +200,8 @@ export default function Account() {
           </div>
           <span style={{ fontSize: 14, fontWeight: 700, color: "var(--tmt-ink)" }}>TailorMyText</span>
         </Link>
-        <Link to="/" style={{ ...LINK_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--tmt-ink-soft)", padding: "8px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: "var(--tmt-paper-card)" }}>
-          <ArrowLeft size={13} /> Back to app
+        <Link to="/" className="rf-link-btn" style={{ ...LINK_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--tmt-ink-soft)", padding: "8px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: "var(--tmt-paper-card)" }}>
+          <ArrowLeft size={13} /> Back to Reader
         </Link>
       </header>
 

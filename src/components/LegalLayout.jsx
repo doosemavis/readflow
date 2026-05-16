@@ -24,8 +24,8 @@ export default function LegalLayout({ t, title, lastUpdated, children }) {
           <div style={{ width: 22, height: 22, borderRadius: "50%", background: "radial-gradient(circle at 35% 35%, var(--tmt-sand) 0%, var(--tmt-terra) 55%, var(--tmt-terra-deep) 100%)", boxShadow: "inset -2px -3px 6px rgba(0,0,0,0.2)" }} />
           <span style={{ fontFamily: "var(--tmt-serif-display)", fontSize: 18, fontWeight: 500, color: "var(--tmt-ink)", letterSpacing: "-0.01em", fontVariationSettings: '"opsz" 144, "SOFT" 60' }}>TailorMyText</span>
         </Link>
-        <Link to="/" className="tmt-btn ghost" style={{ padding: "10px 16px", fontSize: 11 }}>
-          <ArrowLeft size={12} /> Back to app
+        <Link to="/" className="tmt-btn ghost rf-link-btn" style={{ padding: "10px 16px", fontSize: 11 }}>
+          <ArrowLeft size={12} /> Back to Reader
         </Link>
       </header>
 

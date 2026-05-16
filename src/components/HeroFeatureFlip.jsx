@@ -87,7 +87,9 @@ const CARD_HEIGHT      = 286;
 
 export default function HeroFeatureFlip() {
   const [pageIndex, setPageIndex] = useState(0);
-  // tickCount drives the stage rotateX — 0, 180, 360, 540… one half-turn per flip.
+  // tickCount drives the stage rotateY — 0, 180, 360, 540… one half-turn per flip.
+  // Y-axis rotation flips the card horizontally (right-to-left), mimicking a
+  // page turning in a book rather than a vertical card flip.
   const [tickCount, setTickCount] = useState(0);
   // Each physical face's content. We mutate them around the flip so the
   // visible face never changes content mid-animation.
@@ -141,7 +143,7 @@ export default function HeroFeatureFlip() {
           position: "relative", width: "100%", height: "100%",
           transformStyle: "preserve-3d",
           transition: `transform ${FLIP_DURATION_MS}ms cubic-bezier(.45, .04, .15, 1)`,
-          transform: `rotateX(${tickCount * 180}deg)`,
+          transform: `rotateY(${tickCount * -180}deg)`,
         }}>
           <Face content={faceA} rotation={0} />
           <Face content={faceB} rotation={180} />
@@ -186,7 +188,7 @@ function Face({ content, rotation }) {
       display: "flex", flexDirection: "column",
       backfaceVisibility: "hidden",
       WebkitBackfaceVisibility: "hidden",
-      transform: `rotateX(${rotation}deg)`,
+      transform: `rotateY(${rotation}deg)`,
     }}>
       <div style={{ marginBottom: 10 }}>
         <span className="tmt-eyebrow lead" style={{ fontSize: 11 }}>{content.eyebrow}</span>
