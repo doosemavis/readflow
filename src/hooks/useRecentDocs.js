@@ -41,12 +41,13 @@ export function useRecentDocs(authReady, userId) {
 
   const saveDoc = useCallback(async (name, sections, fullText) => {
     if (!userId) throw new Error("Not signed in");
-    await cloudSaveDoc(userId, name, sections, fullText);
+    const saved = await cloudSaveDoc(userId, name, sections, fullText);
     // Refresh from the server — cloudSaveDoc handles dedup-by-name and
     // trim-to-MAX_RECENT_DOCS server-side, so the authoritative state
     // lives there. Cheaper than rebuilding the same logic client-side.
     const list = await cloudListRecent(userId);
     setRecentList(list);
+    return saved;
   }, [userId]);
 
   const loadDoc = useCallback(async (entry) => {

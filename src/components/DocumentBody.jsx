@@ -192,9 +192,8 @@ const Paragraph = memo(function Paragraph({ para, idx, huePalette, neuroDivInten
   );
 });
 
-const Section = memo(function Section({ section, si, settings, onParaMouseEnter, refCallback }) {
+const Section = memo(function Section({ section, si, settings, onParaMouseEnter, refCallback, titleRefCallback }) {
   const { t, huePalette, neuroDivIntensity } = settings;
-  const paras = useMemo(() => section.content.split(/\n\s*\n/).filter(p => p.trim()), [section.content]);
   const isPage = section.type === "page";
   const typeLabel = isPage ? `Page ${section.number}` : null;
   // Prefer the original document's measured ratio so a 2.25× h1 stays
@@ -202,6 +201,35 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
   // page/chapter scale when the parser couldn't measure (e.g. outline-
   // derived chapter titles that don't correspond to a single line).
   const titleScale = section.titleSizeRatio ?? (isPage ? 1.4 : 1.5);
+
+  // Always show a chapter heading. Three tiers:
+  //   1. section.title (set by the parser from TOC or first h1/h2/h3)
+  //   2. promote first body line if it matches a chapter-heading pattern
+  //      (and strip it from content so we don't render it twice)
+  //   3. synthesize "Chapter N" / "Page N" — matches the dropdown label
+  // Tier 3 is the fix for poorly-structured EPUBs where the parser
+  // couldn't find a title; without it, picking a chapter from the
+  // dropdown landed on the first body sentence with no heading visible.
+  const { effectiveTitle, effectiveContent } = useMemo(() => {
+    if (section.title) {
+      return { effectiveTitle: section.title, effectiveContent: section.content };
+    }
+    const lines = section.content.split(/\n/);
+    const firstLine = lines[0]?.trim();
+    if (firstLine && /^(chapter|part|section|act|book|volume)\b/i.test(firstLine) && firstLine.length < 80) {
+      return {
+        effectiveTitle: firstLine,
+        effectiveContent: lines.slice(1).join("\n").trim(),
+      };
+    }
+    const num = section.number || si + 1;
+    return {
+      effectiveTitle: isPage ? `Page ${num}` : `Chapter ${num}`,
+      effectiveContent: section.content,
+    };
+  }, [section.title, section.content, section.number, isPage, si]);
+
+  const paras = useMemo(() => effectiveContent.split(/\n\s*\n/).filter(p => p.trim()), [effectiveContent]);
 
   return (
     <div ref={refCallback} className="rf-section">
@@ -214,21 +242,20 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
       ) : (
         <div style={{ ...DIVIDER_PLAIN_STYLE, background: t.border }} />
       ))}
-      {section.title && (
-        <div style={TITLE_WRAP_STYLE}>
-          <h2 style={{
-            fontSize: `calc(var(--rf-font-size, 18px) * ${titleScale})`,
-            fontWeight: isPage ? 740 : 760,
-            color: t.fg,
-            margin: 0,
-            lineHeight: isPage ? 1.3 : 1.25,
-            fontFamily: "var(--rf-font-family, 'Literata', serif)",
-            letterSpacing: isPage ? "-0.01em" : "-0.02em",
-          }}>
-            {section.title.split(/\s+/).map((w, wi, arr) => renderWord(w, wi, arr.length, huePalette, neuroDivIntensity))}
-          </h2>
-        </div>
-      )}
+      <div ref={titleRefCallback} style={TITLE_WRAP_STYLE}>
+        {/* Title fade-in is handled by a CSS animation on the wrapper
+            (.rf-chapter-reveal in global.css) — plain text, no per-frame
+            RAF gradient computation, much cheaper than the prior sweep. */}
+        <h2 style={{
+          fontSize: `calc(var(--rf-font-size, 18px) * ${titleScale})`,
+          fontWeight: isPage ? 740 : 760,
+          color: t.fg,
+          margin: 0,
+          lineHeight: isPage ? 1.3 : 1.25,
+          fontFamily: "var(--rf-font-family, 'Literata', serif)",
+          letterSpacing: isPage ? "-0.01em" : "-0.02em",
+        }}>{effectiveTitle}</h2>
+      </div>
       {paras.map((p, pi) => (
         <Paragraph
           key={pi}
@@ -243,7 +270,7 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
   );
 });
 
-const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections, wrapperRef, featureClassRef, settings, focusModeRef, setFocusPara, sectionRefs }) {
+const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections, wrapperRef, featureClassRef, settings, focusModeRef, setFocusPara, sectionRefs, titleRefs }) {
   const { huePalette, neuroDivIntensity, t } = settings;
 
   const onParaMouseEnter = useCallback((idx) => {
@@ -258,6 +285,13 @@ const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections
       if (sectionRefs) sectionRefs.current[si] = el;
     });
   }, [docSections, sectionRefs]);
+
+  const titleRefCallbacks = useMemo(() => {
+    if (!docSections) return [];
+    return docSections.map((_, si) => (el) => {
+      if (titleRefs) titleRefs.current[si] = el;
+    });
+  }, [docSections, titleRefs]);
 
   const wrapperStyle = useMemo(() => ({
     width: "var(--rf-column-width, 95%)",
@@ -285,6 +319,7 @@ const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections
               settings={settings}
               onParaMouseEnter={onParaMouseEnter}
               refCallback={sectionRefCallbacks[si]}
+              titleRefCallback={titleRefCallbacks[si]}
             />
           ))
         ) : (

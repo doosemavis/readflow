@@ -11,6 +11,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { THEMES, PALETTES, GUIDE_COLORS, FONTS, DEMO_TEXT } from "./config/constants";
 import { isThemeFree, isPaletteFree, isGuideColorFree } from "./config/proFeatures";
 import { getRevealColors } from "./config/themeColors";
+import { marketingThemeVars } from "./utils/marketingTheme";
 
 // Maps raw parser exceptions to user-friendly messages. Internal pdf.js /
 // EPub.js / mammoth error strings ("InvalidPDFException", "Cannot read
@@ -54,7 +55,7 @@ const FMT_PCT_FROM_FRAC = v => `${Math.round(v * 100)}%`;
 // doUpload validates against. Picker hint and runtime check stay in sync
 // because both derive from the same source. The `accept` attribute alone
 // can't be relied on — drag-and-drop and "show all files" both bypass it.
-const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.html,.htm,.json";
+const FILE_ACCEPT = ".pdf,.epub,.txt,.md,.docx,.json";
 const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, "")));
 
 // Theme picker layout: left column = light themes, right column = dark themes (5 + 5).
@@ -63,6 +64,7 @@ const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, 
 const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
 const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, parseInWorker, runThemeTransition } from "./utils";
+import { storageGet, storageSet } from "./utils/storage";
 import { supabase } from "./utils/supabase";
 import { track } from "./utils/track";
 import { useSubscription } from "./hooks/useSubscription";
@@ -71,6 +73,7 @@ import { useAvatar } from "./hooks/useAvatar";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useAuth } from "./contexts/AuthContext";
 import { useToast } from "./components/Toast";
+import HeroFeatureFlip from "./components/HeroFeatureFlip";
 import {
   Toggle, Slider, Segment, Section, FontPicker, Tip,
   UploadBadge, SidebarRecentDocs, LandingRecentDocs,
@@ -95,6 +98,10 @@ export default function App() {
   const [text, setText] = useState("");
   const [docSections, setDocSections] = useState(null);
   const [fileName, setFileName] = useState("");
+  // Stable doc id of the currently loaded doc — used to key per-doc
+  // reading position in localStorage so switching between docs and back
+  // resumes at the right place.
+  const [currentDocId, setCurrentDocId] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [hoverUpload, setHoverUpload] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -288,11 +295,13 @@ export default function App() {
   const [checkoutBilling, setCheckoutBilling] = useState("monthly");
   const [showChapterNav, setShowChapterNav] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
 
   // ── Refs ──
   const fileRef = useRef();
   const readerRef = useRef();
   const sectionRefs = useRef({});
+  const titleRefs = useRef({});
   const docWrapperRef = useRef(null);
   const typographyRafRef = useRef(null);
 
@@ -432,9 +441,221 @@ export default function App() {
   }), [neuroDivIntensity, huePalette, t]);
 
   // ── Handlers ──
+  // Chapter jump pipeline (matches restore for visual consistency):
+  //   1. Hide wrapper instantly so the user sees feedback the same frame
+  //      as the click and never sees the scroll-work snap.
+  //   2. Defer the heavy layout pass to the NEXT animation frame. This
+  //      lets opacity:0 commit to the screen first, so the user perceives
+  //      "click registered" immediately even if forced layout is slow.
+  //   3. rf-nav-jump forces content-visibility off so all sections report
+  //      real heights; compute the title's offset; instant-scroll there.
+  //   4. Stable-frame settle (3 consecutive idle frames or 15 max) catches
+  //      late shifts (lazy images, font metrics) invisibly behind the
+  //      hidden wrapper.
+  //   5. Reveal — add .rf-chapter-reveal which runs the wrapper fade-in
+  //      (250ms, brings the title up) plus the slower body paragraph fade
+  //      (800ms with 150ms delay). Title leads, body follows.
   const scrollToSection = useCallback((idx) => {
-    sectionRefs.current[idx]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const container = readerRef.current;
+    const wrapper = docWrapperRef.current;
+    if (!container) return;
+    setCurrentSectionIdx(idx);
+
+    if (wrapper) {
+      wrapper.classList.remove("rf-chapter-reveal");
+      wrapper.style.opacity = "0";
+      void wrapper.offsetHeight;
+    }
+
+    requestAnimationFrame(() => {
+      container.classList.add("rf-nav-jump");
+      void container.offsetHeight;
+      const TOP_GUTTER = 8;
+      const computeTop = () => {
+        const target = titleRefs.current[idx] ?? sectionRefs.current[idx];
+        if (!target) return null;
+        const tr = target.getBoundingClientRect();
+        const cr = container.getBoundingClientRect();
+        return Math.max(0, tr.top - cr.top + container.scrollTop - TOP_GUTTER);
+      };
+      const first = computeTop();
+      if (first != null) container.scrollTo({ top: first, behavior: "instant" });
+
+      let stableFrames = 0;
+      let passes = 0;
+      const MAX_PASSES = 15;
+      const REQUIRED_STABLE = 3;
+      const finish = () => {
+        container.classList.remove("rf-nav-jump");
+        if (wrapper) {
+          wrapper.style.opacity = "";
+          wrapper.classList.add("rf-chapter-reveal");
+          window.setTimeout(() => wrapper.classList.remove("rf-chapter-reveal"), 1000);
+        }
+      };
+      const settle = () => {
+        passes++;
+        const corrected = computeTop();
+        if (corrected != null && Math.abs(corrected - container.scrollTop) > 1) {
+          container.scrollTo({ top: corrected, behavior: "instant" });
+          stableFrames = 0;
+        } else {
+          stableFrames++;
+        }
+        if (stableFrames >= REQUIRED_STABLE || passes >= MAX_PASSES) finish();
+        else requestAnimationFrame(settle);
+      };
+      requestAnimationFrame(settle);
+    });
   }, []);
+
+  // Reset the active-chapter pointer whenever the doc changes.
+  useEffect(() => { setCurrentSectionIdx(0); }, [docSections]);
+
+  // Scroll watcher: keep the dropdown label in sync with whatever section
+  // the user has scrolled to. RAF-throttled — at most one update per frame.
+  // The active section is the topmost one whose top has scrolled at or above
+  // an 80px gutter line below the toolbar.
+  useEffect(() => {
+    const container = readerRef.current;
+    if (!container || !hasSections || !docSections?.length) return;
+    let raf = null;
+    const update = () => {
+      raf = null;
+      const cr = container.getBoundingClientRect();
+      const gutter = 80;
+      let active = 0;
+      for (let i = 0; i < docSections.length; i++) {
+        const el = sectionRefs.current[i];
+        if (!el) continue;
+        const top = el.getBoundingClientRect().top - cr.top;
+        if (top <= gutter) active = i;
+        else break;
+      }
+      setCurrentSectionIdx(prev => prev === active ? prev : active);
+    };
+    const onScroll = () => { if (raf == null) raf = requestAnimationFrame(update); };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [hasSections, docSections]);
+
+  // Restore the user's last chapter when a doc loads. Lands at the
+  // CHAPTER TITLE (titleRefs + TOP_GUTTER) — same as a chapter-dropdown
+  // jump — not at the saved scrollOffset. Rationale: when the user opens
+  // a doc they were reading, they want to see the chapter heading so
+  // they know where they are. The in-chapter offset that we still save
+  // would put them past the title (mid-paragraph), which loses
+  // orientation. Same hide → fonts → settle → reveal pipeline as before.
+  useEffect(() => {
+    if (!docSections || !hasSections || !currentDocId) return;
+    const container = readerRef.current;
+    const wrapper = docWrapperRef.current;
+    if (!container) return;
+    let cancelled = false;
+    (async () => {
+      const stored = await storageGet(`pos:${currentDocId}`);
+      if (cancelled || !stored) return;
+      let pos;
+      try { pos = JSON.parse(stored); } catch { return; }
+      const sectionIdx = Number(pos?.sectionIdx) || 0;
+      // Section 0 is the default starting position — nothing to restore.
+      if (sectionIdx === 0) return;
+
+      if (wrapper) {
+        wrapper.classList.remove("rf-chapter-reveal");
+        wrapper.style.opacity = "0";
+        void wrapper.offsetHeight;
+      }
+
+      if (document.fonts?.ready) {
+        try { await document.fonts.ready; } catch {}
+      }
+      if (cancelled) { if (wrapper) wrapper.style.opacity = ""; return; }
+
+      container.classList.add("rf-nav-jump");
+      void container.offsetHeight;
+
+      const TOP_GUTTER = 8;
+      const computeTarget = () => {
+        const target = titleRefs.current[sectionIdx] ?? sectionRefs.current[sectionIdx];
+        if (!target) return null;
+        const tr = target.getBoundingClientRect();
+        const cr = container.getBoundingClientRect();
+        return Math.max(0, tr.top - cr.top + container.scrollTop - TOP_GUTTER);
+      };
+
+      const first = computeTarget();
+      if (first != null) container.scrollTo({ top: first, behavior: "instant" });
+
+      let stableFrames = 0;
+      let passes = 0;
+      const MAX_PASSES = 30;
+      const REQUIRED_STABLE = 3;
+      const finish = () => {
+        container.classList.remove("rf-nav-jump");
+        setCurrentSectionIdx(sectionIdx);
+        if (wrapper) {
+          wrapper.style.opacity = "";
+          wrapper.classList.add("rf-chapter-reveal");
+          window.setTimeout(() => wrapper.classList.remove("rf-chapter-reveal"), 1100);
+        }
+      };
+      const settle = () => {
+        if (cancelled) { container.classList.remove("rf-nav-jump"); if (wrapper) wrapper.style.opacity = ""; return; }
+        passes++;
+        const corrected = computeTarget();
+        if (corrected != null && Math.abs(corrected - container.scrollTop) > 1) {
+          container.scrollTo({ top: corrected, behavior: "instant" });
+          stableFrames = 0;
+        } else {
+          stableFrames++;
+        }
+        if (stableFrames >= REQUIRED_STABLE || passes >= MAX_PASSES) finish();
+        else requestAnimationFrame(settle);
+      };
+      requestAnimationFrame(settle);
+    })();
+    return () => { cancelled = true; };
+  }, [docSections, hasSections, currentDocId]);
+
+  // Save reading position on scroll, debounced. Computes sectionIdx +
+  // pixel offset within that section from the container's scroll state
+  // (no dependency on currentSectionIdx, which churns every RAF). Writes
+  // to localStorage keyed by docId, so each doc remembers its own place.
+  useEffect(() => {
+    if (!docSections || !hasSections || !currentDocId) return;
+    const container = readerRef.current;
+    if (!container) return;
+    let saveTimer = null;
+    const savePosition = () => {
+      const cr = container.getBoundingClientRect();
+      let sectionIdx = 0;
+      let scrollOffset = 0;
+      for (let i = 0; i < docSections.length; i++) {
+        const el = sectionRefs.current[i];
+        if (!el) continue;
+        const top = el.getBoundingClientRect().top - cr.top;
+        if (top <= 0) {
+          sectionIdx = i;
+          scrollOffset = -top;
+        } else break;
+      }
+      storageSet(`pos:${currentDocId}`, JSON.stringify({ sectionIdx, scrollOffset: Math.round(scrollOffset), savedAt: Date.now() }));
+    };
+    const onScroll = () => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(savePosition, 600);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      if (saveTimer) { clearTimeout(saveTimer); savePosition(); }
+    };
+  }, [docSections, hasSections, currentDocId]);
 
   const attemptUpload = useCallback((file) => {
     if (!file) return;
@@ -465,7 +686,7 @@ export default function App() {
       // branch and `.text()` decodes its binary bytes as UTF-8 garbage —
       // user sees a screen of gibberish instead of a clear error.
       if (!SUPPORTED_EXTS.has(ext)) {
-        throw new Error(`TailorMyText doesn't support .${ext} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, HTML, JSON).`);
+        throw new Error(`TailorMyText doesn't support .${ext} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, JSON).`);
       }
       if (ext === "pdf") { setLoadMsg("Loading PDF engine…"); sections = await parsePDF(file); }
       else if (ext === "epub") { setLoadMsg("Unpacking EPUB…"); sections = await parseEPUB(file); }
@@ -501,7 +722,8 @@ export default function App() {
     // monthly quota isn't burned by a storage outage.
     const wasFirstUpload = recentDocs.recentList.length === 0;
     try {
-      await recentDocs.saveDoc(file.name, sections, sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n"));
+      const saved = await recentDocs.saveDoc(file.name, sections, sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n"));
+      if (saved?.id) setCurrentDocId(saved.id);
       await sub.recordUpload();
       if (wasFirstUpload) track("first_upload");
     }
@@ -528,9 +750,14 @@ export default function App() {
     setLoading(true); setLoadMsg("Loading saved document…");
     try {
       const data = await recentDocs.loadDoc(entry);
-      if (data) { setText(data.text); setDocSections(data.sections); setFileName(data.name); }
-      else { setText("Document no longer available. Try uploading it again."); setDocSections(null); setFileName(entry.name); }
-    } catch { setText("Error loading saved document."); setDocSections(null); }
+      if (data) {
+        setText(data.text); setDocSections(data.sections); setFileName(data.name);
+        setCurrentDocId(entry.id);
+      } else {
+        setText("Document no longer available. Try uploading it again.");
+        setDocSections(null); setFileName(entry.name); setCurrentDocId(null);
+      }
+    } catch { setText("Error loading saved document."); setDocSections(null); setCurrentDocId(null); }
     finally { setLoading(false); setLoadMsg(""); }
   }, [recentDocs]);
 
@@ -661,57 +888,276 @@ export default function App() {
   // overlay then fades out over the freshly-painted reader.
   if (!text) return (
     <>
-    <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", fontFamily: "'DM Sans', sans-serif" }}>
+    <div
+      className="tmt-marketing"
+      style={{
+        // marketingThemeVars(t) maps active theme tokens to the
+        // .tmt-marketing custom properties so the editorial design
+        // adapts to the active theme. Typography stays Fraunces/
+        // Newsreader/Plex Mono; only colors flow from `t`.
+        // Modals (Radix Portal → body) don't inherit this scope but
+        // they spread the same helper on their own wrappers.
+        ...marketingThemeVars(t),
+        minHeight: "100vh",
+        background: t.bg,
+        color: t.fg,
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: "'DM Sans', sans-serif",
+        position: "relative",
+      }}
+    >
+      {/* Atmosphere — drifting blobs + paper grain. Fixed-position so they
+          sit behind every section on the landing without affecting flow. */}
+      <div className="tmt-blobs" aria-hidden="true">
+        <div className="tmt-blob b1" />
+        <div className="tmt-blob b2" />
+        <div className="tmt-blob b3" />
+      </div>
+      <div className="tmt-grain" aria-hidden="true" />
       {user && deletionEffectiveAt && <PendingDeletionBanner user={user} effectiveAt={deletionEffectiveAt} onReactivated={refreshDeletionStatus} t={t} />}
       {user && sub.isLockedOut && <PostDeletionLockoutBanner lockoutUntil={sub.lockoutUntil} onSubscribe={() => setShowPricing(true)} />}
       {modals}
       <div style={{ position: "fixed", top: 14, right: 16, zIndex: 100 }}>
         <UserMenu t={t} onShowAuth={() => setShowAuth(true)} onShowAvatarSettings={() => setShowAvatarSettings(true)} onShowSubscription={() => setShowSubscription(true)} onShowPaymentReceipts={handleShowPaymentReceipts} showPaymentReceipts={sub.hasStripeHistory} onShowDeleteAccount={() => setShowDeleteAccount(true)} avatar={avatar} themePersistEnabled={themePref.persistEnabled} onToggleThemePersist={onToggleThemePersist} mockFreeMode={sub.mockFreeMode} onToggleMockFreeMode={sub.toggleMockFreeMode} isProGrantActive={sub.isProGrantActive} />
       </div>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ textAlign: "center", maxWidth: 520 }}>
-        <div style={{ width: 68, height: 68, borderRadius: 20, background: t.accentSoft, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}><BookOpen size={32} style={{ color: t.accent, transform: "translateY(1px)" }} /></div>
-        <h1 style={{ fontSize: 36, fontWeight: 740, marginBottom: 6, letterSpacing: "-0.025em" }}>
-          {/* key={theme} forces a remount on theme change so the gradient
-             sweep re-fires in the new palette — same trick the reader uses
-             on font change, applied here to theme change. Re-states the
-             accessibility-first positioning at the moment the user actually
-             exercises it (clicking a theme dot). */}
-          <DiaTextReveal
-            key={theme}
-            text="TailorMyText"
-            colors={getRevealColors(theme)}
-            textColor={t.fg}
-            duration={2}
-          />
-        </h1>
-        <p style={{ fontSize: 15, color: t.fgSoft, marginBottom: 12, lineHeight: 1.6, maxWidth: 400, margin: "0 auto 12px", textWrap: "balance" }}>
-          <DiaTextReveal
-            key={theme}
-            text="Reading that adapts to you — typography, focus, and color tuned to the way your brain reads."
-            colors={getRevealColors(theme)}
-            textColor={t.fgSoft}
-            duration={2}
-          />
-        </p>
-        {(sub.isPro || sub.uploadsUsed > 0) && (
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, background: t.surface, border: `1px solid ${t.borderSoft}`, marginBottom: 32, fontSize: 12, fontWeight: 600, color: t.fgSoft }}>
-            {sub.isPro ? <><Crown size={12} style={{ color: t.accent }} /><span style={{ color: t.accent }}>{sub.isTrial ? `Pro Trial — ${sub.trialDaysLeft} days left` : "Pro Plan"}</span></> : <><FileText size={12} /> {sub.uploadsUsed}/3 free docs used</>}
-            {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ background: t.accentSoft, border: "none", cursor: "pointer", color: t.accent, fontSize: 11, fontWeight: 650, padding: "2px 8px", borderRadius: 6, marginLeft: 4 }}>Upgrade</button>}
+
+      {/* ═══════════════ EDITORIAL HERO — 2-column ═══════════════
+          LEFT: eyebrow + Fraunces value-prop headline (DiaTextReveal
+          preserved, re-fires on theme change via key={theme}) + Newsreader
+          subhead + game-button CTAs + status pill + trust pills.
+          RIGHT: drop zone reimagined as the editorial reading-panel card
+          (drag-drop, click-to-browse, file input — all handlers preserved).
+          .tmt-hero class handles the responsive grid (stacks <980px). */}
+      <div className="tmt-hero" style={{ position: "relative", zIndex: 2 }}>
+
+        {/* ─── LEFT COLUMN ─── */}
+        <div style={{ paddingTop: 16 }}>
+          <div style={{ marginBottom: 28 }}>
+            <span className="tmt-eyebrow lead">A reading app, built for human eyes</span>
           </div>
-        )}
-        <div onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} onClick={() => !loading && fileRef.current?.click()} onMouseEnter={() => setHoverUpload(true)} onMouseLeave={() => setHoverUpload(false)} style={{ border: `2px dashed ${dragging || hoverUpload ? t.accent : t.border}`, borderRadius: 18, padding: "52px 32px", cursor: "pointer", background: dragging ? t.accentSoft : hoverUpload ? t.surfaceHover : t.surface, transition: "all 0.25s ease", marginBottom: 24, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", transform: hoverUpload ? "translateY(-2px)" : "translateY(0)", boxShadow: hoverUpload ? `0 8px 24px ${t.accent}15` : "none" }}>
-          <Upload size={30} style={{ color: hoverUpload ? t.accent : t.icon, marginBottom: 14, transition: "color 0.2s ease" }} />
-          <p style={{ fontSize: 15, fontWeight: 620, color: t.fg, marginBottom: 6 }}>Drop a file here or click to browse</p>
-          <p style={{ fontSize: 12, color: hoverUpload ? t.accent : t.fgSoft, letterSpacing: "0.04em", transition: "color 0.2s ease" }}>PDF · EPUB · DOCX · TXT · MD · HTML</p>
-          <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) attemptUpload(f); }} />
+
+          <h1
+            className="tmt-display"
+            style={{
+              fontSize: "clamp(40px, 5.4vw, 76px)",
+              fontWeight: 380,
+              lineHeight: 1.02,
+              letterSpacing: "-0.025em",
+              marginBottom: 28,
+            }}
+          >
+            {/* DiaTextReveal preserved verbatim — key={theme} re-fires the
+                gradient sweep on theme change. Wrapping a serif heading in
+                it is exactly what the component was designed for. */}
+            <DiaTextReveal
+              key={theme}
+              text="Tailor every text to the reader you actually are."
+              colors={getRevealColors(theme)}
+              textColor={t.fg}
+              duration={2}
+            />
+          </h1>
+
+          <p style={{
+            fontFamily: "var(--tmt-serif-body)",
+            fontSize: 18,
+            lineHeight: 1.55,
+            color: "var(--tmt-ink-soft)",
+            maxWidth: 480,
+            marginBottom: 36,
+          }}>
+            PDF, EPUB, DOCX &mdash; adapted in a tap to the typography your eyes
+            actually need. Built for dyslexia, low vision, ADHD, eye strain,
+            and every reader in between.
+          </p>
+
+          {/* Status pill — preserved from original hero */}
+          {(sub.isPro || sub.uploadsUsed > 0) && (
+            <div style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 14px",
+              borderRadius: 999,
+              background: "var(--tmt-paper-deep)",
+              border: "1px solid var(--tmt-rule)",
+              marginBottom: 24,
+              fontFamily: "var(--tmt-mono)",
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
+              color: "var(--tmt-ink-soft)",
+            }}>
+              {sub.isPro
+                ? <><Crown size={12} style={{ color: "var(--tmt-terra)" }} /><span style={{ color: "var(--tmt-terra)" }}>{sub.isTrial ? `Pro Trial · ${sub.trialDaysLeft}d left` : "Pro Plan"}</span></>
+                : <><FileText size={12} /> {sub.uploadsUsed}/3 free docs used</>}
+              {!sub.isPro && (
+                <button
+                  onClick={() => setShowPricing(true)}
+                  className="rf-btn-solid"
+                  style={{
+                    background: t.accent,
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#fff",
+                    fontFamily: "var(--tmt-mono)",
+                    fontSize: 10,
+                    fontWeight: 500,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.14em",
+                    padding: "5px 10px",
+                    borderRadius: 6,
+                    marginLeft: 6,
+                  }}
+                >
+                  Upgrade
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* CTAs — primary triggers file picker, secondaries load demo / open pricing.
+              All three use the rf-btn-solid game-button mechanic (raised ledge,
+              hover lift, press-down). */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 28 }}>
+            <button
+              type="button"
+              onClick={() => !loading && fileRef.current?.click()}
+              className="rf-btn-solid tmt-btn"
+            >
+              Start reading free
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M13 5l7 7-7 7"/></svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); setPanelOpen(false); }}
+              className="rf-btn-solid tmt-btn ghost"
+            >
+              <FileText size={13} /> Try demo article
+            </button>
+            {!sub.isPro && (
+              <button
+                type="button"
+                onClick={() => setShowPricing(true)}
+                className="rf-btn-solid tmt-btn ghost"
+              >
+                <Crown size={13} /> See Pro plans
+              </button>
+            )}
+          </div>
+
+          {/* Trust pills — small editorial badges. Don't get the game-button
+              mechanic (rf-static suppresses it) since they're informational. */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <span className="tmt-pill">No card to start</span>
+            <span className="tmt-pill">7-day private storage</span>
+            <span className="tmt-pill">Accessibility-first</span>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-          <button onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); setPanelOpen(false); }} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: t.accent, color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><FileText size={14} /> Try demo article</button>
-          {!sub.isPro && <button onClick={() => setShowPricing(true)} style={{ padding: "10px 28px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", display: "inline-flex", alignItems: "center", gap: 8 }}><Crown size={14} /> See Pro plans</button>}
+
+        {/* ─── RIGHT COLUMN — drop zone as editorial reading panel ─── */}
+        <div style={{ position: "relative", paddingTop: 16 }}>
+          {/* Drop zone — sized to fill ~half the right column's height so it
+              meets the flip card in the middle and visually balances the
+              left column's editorial stack. Drag-drop + click handlers,
+              file input — all preserved verbatim. */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            onClick={() => !loading && fileRef.current?.click()}
+            onMouseEnter={() => setHoverUpload(true)}
+            onMouseLeave={() => setHoverUpload(false)}
+            style={{
+              position: "relative",
+              background: "var(--tmt-paper-card)",
+              border: dragging || hoverUpload ? `2px dashed ${t.accent}` : "1px solid var(--tmt-rule)",
+              borderRadius: 28,
+              padding: "92px 44px 100px",
+              cursor: "pointer",
+              textAlign: "center",
+              transition: "transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease",
+              transform: hoverUpload ? "translateY(-3px)" : "translateY(0)",
+              boxShadow: hoverUpload
+                ? `0 28px 70px -28px ${t.accent}55, 0 1px 0 rgba(255,255,255,0.6) inset`
+                : "0 24px 60px -32px rgba(31, 24, 18, 0.35), 0 6px 16px -8px rgba(31, 24, 18, 0.18), 0 1px 0 rgba(255,255,255,0.6) inset",
+            }}
+          >
+            {/* Editorial demo-corner badge — sits on the top edge of the card,
+                signals "this is your live workspace." */}
+            <span style={{
+              position: "absolute",
+              top: -14,
+              left: 32,
+              background: "var(--tmt-ink)",
+              color: "var(--tmt-paper)",
+              fontFamily: "var(--tmt-mono)",
+              fontSize: 10.5,
+              fontWeight: 500,
+              textTransform: "uppercase",
+              letterSpacing: "0.18em",
+              padding: "6px 14px",
+              borderRadius: 999,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              boxShadow: "0 4px 0 rgba(0,0,0,0.12)",
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: t.accent,
+                boxShadow: `0 0 0 3px ${t.accent}33`,
+              }} />
+              Your reading panel
+            </span>
+
+            <Upload size={52} strokeWidth={1.6} style={{ color: hoverUpload || dragging ? t.accent : "var(--tmt-ink-muted)", marginBottom: 22, transition: "color 0.2s ease" }} />
+            <p className="tmt-display" style={{ fontSize: 26, fontWeight: 420, color: "var(--tmt-ink)", marginBottom: 12, letterSpacing: "-0.015em" }}>
+              Drop a file here, or click to browse
+            </p>
+            <p style={{ fontFamily: "var(--tmt-mono)", fontSize: 11, color: hoverUpload ? t.accent : "var(--tmt-ink-muted)", textTransform: "uppercase", letterSpacing: "0.16em", transition: "color 0.2s ease" }}>
+              PDF · EPUB · DOCX · TXT · MD
+            </p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept={FILE_ACCEPT}
+              style={{ display: "none" }}
+              onChange={e => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) attemptUpload(f);
+              }}
+            />
+          </div>
+
+          {/* Auto-cycling feature flip card — Privacy + 5 feature highlights
+              cycling on a 3D page-flip animation. Sized to roughly match
+              the drop zone so the right column reads as two balanced
+              stacked elements. Click the dots to jump. */}
+          <HeroFeatureFlip />
         </div>
-        {user && <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} isPro={sub.isPro} t={t} />}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 40 }}>
+      </div>
+
+      {/* ─── CONTINUE READING — centered horizontal pill strip, sits in its
+          own band above the theme picker so it flows with the centered
+          theme dots instead of throwing the right hero column out of
+          balance. Hidden when the library is empty. */}
+      {user && (
+        <div style={{ position: "relative", zIndex: 2, padding: "0 24px 36px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} isPro={sub.isPro} t={t} />
+        </div>
+      )}
+
+      {/* ─── THEME PICKER — slim editorial row below the hero. Preserves
+          the radial reveal animation (runThemeTransition uses the View
+          Transitions API to wipe-reveal the new theme outward from the
+          click point). The dots themselves still call setTheme via
+          runThemeTransition exactly as before. */}
+      <div style={{ position: "relative", zIndex: 2, padding: "0 24px 56px", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+        <span className="tmt-label">Try a theme — the whole app follows</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
           {Object.entries(THEMES).map(([key, th]) => {
             const free = isThemeFree(key);
             const locked = !sub.isPro && !free;
@@ -720,7 +1166,21 @@ export default function App() {
               <Tip key={key} label={label} t={t} themeKey={key} side="top">
                 <button
                   onClick={(e) => gateCosmetic(free, () => runThemeTransition(e, () => setTheme(key)))}
-                  style={{ position: "relative", width: 26, height: 26, borderRadius: 13, background: th.accent, cursor: "pointer", border: theme === key ? `2.5px solid ${t.fg}` : "2.5px solid transparent", boxShadow: theme === key ? `0 0 0 2.5px ${t.bg}` : "none", transition: "all 0.15s", opacity: locked ? 0.55 : 1, display: "flex", alignItems: "center", justifyContent: "center" }}
+                  className="rf-static"
+                  style={{
+                    position: "relative",
+                    width: 26, height: 26,
+                    borderRadius: 13,
+                    background: th.accent,
+                    cursor: "pointer",
+                    border: theme === key ? `2.5px solid ${t.fg}` : "2.5px solid transparent",
+                    boxShadow: theme === key ? `0 0 0 2.5px ${t.bg}` : "none",
+                    transition: "all 0.15s",
+                    opacity: locked ? 0.55 : 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
                 >
                   {locked && <Lock size={10} style={{ color: "#fff", filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.5))" }} />}
                 </button>
@@ -729,7 +1189,66 @@ export default function App() {
           })}
         </div>
       </div>
-      </div>
+
+      {/* ═══════════════ MARKETING — CONDITIONS GRID ═══════════════
+          Six editorial cards explaining who the product is for.
+          Below-the-fold; doesn't interfere with the upload-first hero. */}
+      <section style={{ position: "relative", zIndex: 2, padding: "100px 24px 60px", borderTop: `1px solid var(--tmt-rule)`, maxWidth: 1240, width: "100%", margin: "0 auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 60, alignItems: "end", marginBottom: 64 }}>
+          <div>
+            <div style={{ marginBottom: 14 }}>
+              <span className="tmt-eyebrow sage">For the way you actually read</span>
+            </div>
+            <h2 className="tmt-display" style={{ fontSize: "clamp(32px, 4vw, 52px)", fontWeight: 350 }}>
+              One reader,<br /><em>countless</em> ways<br />of seeing.
+            </h2>
+          </div>
+          <p style={{ fontFamily: "var(--tmt-serif-body)", fontSize: 18, lineHeight: 1.6, color: "var(--tmt-ink-soft)", maxWidth: 540 }}>
+            Most reading apps were designed for one kind of eye. TailorMyText starts from the
+            opposite premise: every reader brings a different visual system, attention shape,
+            and energy budget &mdash; and the page should bend to meet them, not the other way round.
+          </p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "var(--tmt-rule)", border: "1px solid var(--tmt-rule)", borderRadius: "var(--tmt-radius)", overflow: "hidden" }}>
+          {[
+            { num: "i.",   name: "Dyslexia & reading fatigue", desc: "Wider letter spacing, tuned fonts, and reading-guide overlays that calm the line you're on without freezing the rest of the page.", tag: "Reading guide · spacing · fonts" },
+            { num: "ii.",  name: "Low vision & aging eyes",    desc: "Step text up to magazine-poster scale without losing the document's structure. High-contrast and warm-paper themes, side by side.", tag: "Scale · contrast · sepia" },
+            { num: "iii.", name: "ADHD & sensory overload",    desc: "A single line in focus, the rest gently dimmed. Section navigation that lets you skip without losing where you were.", tag: "Focus mode · sectioning" },
+            { num: "iv.",  name: "Eye strain & long sessions", desc: "Night themes that stay warm enough to read by, line heights that let the page breathe, and zero animation noise once you're reading.", tag: "Night mode · airy spacing" },
+            { num: "v.",   name: "Color sensitivity",          desc: "Six accessibility-oriented font families, eleven palettes, and tunable intensity — combine until the page genuinely disappears into the words.", tag: "Palettes · intensity" },
+            { num: "vi.",  name: "Privacy as accessibility",   desc: "Documents you upload are auto-deleted seven days after you last opened them. Storage is per-account; nothing is shared, nothing trains a model.", tag: "7-day TTL · private bucket" },
+          ].map((c) => (
+            <div key={c.num} style={{ background: "var(--tmt-paper-card)", padding: "32px 28px 34px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ fontFamily: "var(--tmt-serif-display)", fontStyle: "italic", fontWeight: 300, fontSize: 30, color: "var(--tmt-terra)", lineHeight: 1, fontVariationSettings: '"opsz" 144, "SOFT" 100' }}>{c.num}</div>
+              <div style={{ fontFamily: "var(--tmt-serif-display)", fontWeight: 450, fontSize: 21, letterSpacing: "-0.01em", color: "var(--tmt-ink)" }}>{c.name}</div>
+              <p style={{ fontFamily: "var(--tmt-serif-body)", color: "var(--tmt-ink-soft)", fontSize: 15.5, lineHeight: 1.55 }}>{c.desc}</p>
+              <div style={{ marginTop: "auto", fontFamily: "var(--tmt-mono)", fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--tmt-sage)", paddingTop: 16, borderTop: "1px dashed var(--tmt-rule)" }}>{c.tag}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══════════════ MARKETING — PROMISE QUOTE ═══════════════ */}
+      <section style={{ position: "relative", zIndex: 2, padding: "120px 24px 100px", textAlign: "center", maxWidth: 880, margin: "0 auto" }}>
+        <p className="tmt-display" style={{ fontStyle: "italic", fontWeight: 320, fontSize: "clamp(28px, 4vw, 48px)", letterSpacing: "-0.015em", lineHeight: 1.15 }}>
+          <span style={{ color: "var(--tmt-terra)" }}>&ldquo;</span>The page should bend to your eyes<br /><span style={{ whiteSpace: "nowrap" }}>&mdash; not your eyes to the page.<span style={{ color: "var(--tmt-terra)" }}>&rdquo;</span></span>
+        </p>
+        <div style={{ marginTop: 32, fontFamily: "var(--tmt-mono)", fontSize: 11.5, textTransform: "uppercase", letterSpacing: "0.18em", color: "var(--tmt-ink-muted)" }}>
+          &mdash; TailorMyText, in one sentence
+        </div>
+        <div style={{ marginTop: 48 }}>
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="rf-btn-solid tmt-btn ink"
+            style={{ fontFamily: "var(--tmt-mono)" }}
+          >
+            Start reading free
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M13 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+      </section>
+
       <Footer t={t} />
     </div>
     {loaderOverlay}
@@ -763,14 +1282,15 @@ export default function App() {
             </div>
 
             <div style={{ padding: "10px 14px", borderBottom: `1px solid ${t.borderSoft}` }}>
-              <p style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.06em", textTransform: "uppercase", margin: "0 0 8px", padding: "0 2px" }}>Currently Reading</p>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: t.fgSoft }}>
-                <FileText size={13} /><span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileName}</span>
-                <button aria-label="Close document" onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); }} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={16} strokeWidth={2} /></button>
+              <p style={{ fontSize: 10.5, fontWeight: 500, color: t.fgSoft, fontFamily: "'IBM Plex Mono', ui-monospace, monospace", letterSpacing: "0.16em", textTransform: "uppercase", margin: "0 0 10px", padding: "0 2px" }}>Currently Reading</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: t.fgSoft }}>
+                <FileText size={13} style={{ color: t.accent, flexShrink: 0 }} />
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'Newsreader', Georgia, serif", fontStyle: "italic", fontSize: 14, color: t.fg }}>{fileName}</span>
+                <button aria-label="Close document" onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); setCurrentDocId(null); }} style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={15} strokeWidth={2} /></button>
               </div>
             </div>
 
-            <Section title="Enhancements" icon={Sparkles} t={t} open={false}>
+            <Section title="Enhancements" icon={Sparkles} t={t} open={false} active={neuroDiv || hueGuide || focusMode}>
               <Toggle on={neuroDiv} onChange={setNeuroDiv} label="NeuroDiv Anchoring" icon={Baseline} t={t} />
               {neuroDiv && <Slider value={neuroDivIntensity} min={0.2} max={0.7} step={0.01} onChange={setNeuroDivIntensity} label="Bold intensity" format={FMT_PCT_FROM_FRAC} t={t} />}
               <Toggle on={hueGuide} onChange={setHueGuide} label="HueGuide Tracking" icon={Palette} t={t} />
@@ -794,7 +1314,7 @@ export default function App() {
               <Toggle on={focusMode} onChange={v => { setFocusMode(v); if (!v) setFocusPara(-1); }} label="Focus Mode" icon={Focus} t={t} />
             </Section>
 
-            <Section title="Reading Guide" icon={MousePointer2} t={t} open={false}>
+            <Section title="Reading Guide" icon={MousePointer2} t={t} open={false} active={guideMode !== "none"}>
               <div style={{ padding: "4px 12px" }}>
                 <Segment options={[{ value: "none", label: "Off", icon: EyeOff }, { value: "highlight", label: "Highlight", icon: Highlighter }, { value: "underline", label: "Line", icon: UnderlineIcon }, { value: "dim", label: "Dim", icon: Eye }]} value={guideMode} onChange={setGuideMode} t={t} />
               </div>
@@ -916,7 +1436,7 @@ export default function App() {
             </Tip>
           )}
           <button
-            onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); }}
+            onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); setCurrentDocId(null); }}
             className="rf-static"
             title="Back to library"
             style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer", fontSize: 20, fontWeight: 620, color: t.fg, fontFamily: currentFont?.css ?? "'DM Sans', sans-serif", outline: "none", transition: "font-family 0.2s" }}
@@ -946,33 +1466,41 @@ export default function App() {
           {hasSections && docSections.length > 1 && (
             <DropdownMenu.Root open={showChapterNav} onOpenChange={setShowChapterNav}>
               <DropdownMenu.Trigger asChild>
-                <button className="rf-static" style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 8, border: `1px solid ${t.border}`, background: showChapterNav ? t.surface : "transparent", color: t.fgSoft, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", outline: "none" }}>
-                  <List size={14} />
-                  <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{docSections.length} {docSections[0]?.type === "page" ? "pages" : "chapters"}</span>
-                  <ChevronDown size={12} style={{ transform: showChapterNav ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }} />
+                <button className="rf-static" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: showChapterNav ? t.surface : "transparent", color: t.fg, cursor: "pointer", fontSize: 13, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", outline: "none", boxSizing: "border-box" }}>
+                  <List size={14} style={{ color: t.icon }} />
+                  {(() => {
+                    const cur = docSections[currentSectionIdx] ?? docSections[0];
+                    const isPage = cur?.type === "page";
+                    const label = cur?.title || (isPage ? `Page ${cur?.number ?? currentSectionIdx + 1}` : `Chapter ${cur?.number ?? currentSectionIdx + 1}`);
+                    return <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>;
+                  })()}
+                  <ChevronDown size={14} style={{ color: t.icon, transform: showChapterNav ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }} />
                 </button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
                 <DropdownMenu.Content
                   align="end"
                   sideOffset={6}
-                  style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", maxHeight: "60vh", overflowY: "auto", width: 280, zIndex: 999, outline: "none" }}
+                  style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", maxHeight: "60vh", overflowY: "auto", width: 220, zIndex: 999, outline: "none" }}
                 >
-                  <div style={{ padding: "10px 14px 8px", borderBottom: `1px solid ${t.borderSoft}` }}>
+                  <div style={{ padding: "10px 14px 8px", borderBottom: `1px solid ${t.borderSoft}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                     <span style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.05em", textTransform: "uppercase" }}>Table of Contents</span>
+                    <span style={{ fontSize: 11, color: t.fgSoft, fontFamily: "'IBM Plex Mono', ui-monospace, monospace", letterSpacing: "0.04em", flexShrink: 0 }}>{currentSectionIdx + 1} of {docSections.length}</span>
                   </div>
-                  {docSections.map((sec, si) => (
-                    <DropdownMenu.Item
-                      key={si}
-                      onSelect={() => scrollToSection(si)}
-                      onMouseEnter={e => e.currentTarget.style.background = t.surfaceHover}
-                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                      style={{ padding: "10px 14px", cursor: "pointer", color: t.fg, display: "flex", alignItems: "center", gap: 10, borderBottom: si < docSections.length - 1 ? `1px solid ${t.borderSoft}` : "none", outline: "none", userSelect: "none" }}
-                    >
-                      <span style={{ width: 26, height: 26, borderRadius: 7, background: t.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: t.accent, flexShrink: 0, fontFamily: "'DM Sans', sans-serif" }}>{sec.number || si + 1}</span>
-                      <span style={{ fontSize: 13, fontWeight: 550, fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.title || (sec.type === "page" ? `Page ${sec.number || si + 1}` : "Untitled section")}</span>
-                    </DropdownMenu.Item>
-                  ))}
+                  {docSections.map((sec, si) => {
+                    const active = si === currentSectionIdx;
+                    return (
+                      <DropdownMenu.Item
+                        key={si}
+                        onSelect={() => scrollToSection(si)}
+                        onMouseEnter={e => e.currentTarget.style.background = active ? t.accentSoft : t.surfaceHover}
+                        onMouseLeave={e => e.currentTarget.style.background = active ? t.accentSoft : "transparent"}
+                        style={{ padding: "10px 14px", cursor: "pointer", color: active ? t.accent : t.fg, fontWeight: active ? 650 : 550, background: active ? t.accentSoft : "transparent", display: "flex", alignItems: "center", gap: 10, borderBottom: si < docSections.length - 1 ? `1px solid ${t.borderSoft}` : "none", outline: "none", userSelect: "none" }}
+                      >
+                        <span style={{ fontSize: 13, fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.title || (sec.type === "page" ? `Page ${sec.number || si + 1}` : `Chapter ${sec.number || si + 1}`)}</span>
+                      </DropdownMenu.Item>
+                    );
+                  })}
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
@@ -1004,13 +1532,13 @@ export default function App() {
             t={t}
             title="Couldn't render this document"
             description="The reader hit an error displaying this file. It may be malformed or use unsupported markup. Try another document, or reset to clear the error."
-            onReset={() => { setText(""); setDocSections(null); setFileName(""); }}
+            onReset={() => { setText(""); setDocSections(null); setFileName(""); setCurrentDocId(null); }}
           >
             <DocumentBody
               text={text} docSections={docSections} hasSections={hasSections}
               wrapperRef={handleDocWrapperRef} featureClassRef={handleFeatureClassRef}
               settings={settings} focusModeRef={focusModeRef}
-              setFocusPara={setFocusPara} sectionRefs={sectionRefs}
+              setFocusPara={setFocusPara} sectionRefs={sectionRefs} titleRefs={titleRefs}
             />
           </ErrorBoundary>
         </div>
