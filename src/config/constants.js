@@ -53,6 +53,7 @@ export const FONTS = [
   { name: "Source Sans 3",        css: "'Source Sans 3', sans-serif",         href: "Source+Sans+3:wght@400;600;700" },
   { name: "Merriweather",         css: "'Merriweather', serif",              href: "Merriweather:ital,wght@0,400;0,700;1,400" },
   { name: "OpenDyslexic",         css: "'OpenDyslexic', sans-serif",          href: null },
+  { name: "Geist Mono",           css: "'Geist Mono', ui-monospace, monospace", href: "Geist+Mono:wght@400;500;600;700" },
 ];
 
 export const FREE_UPLOAD_LIMIT = 3;
