@@ -7,6 +7,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../components/Toast";
 import { supabase } from "../utils/supabase";
 import { storageGet } from "../utils/storage";
+import { marketingThemeVars } from "../utils/marketingTheme";
 import Footer from "../components/Footer";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -190,38 +191,39 @@ export default function Account() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", fontFamily: "'DM Sans', sans-serif" }}>
+    <div className="tmt-marketing" style={{ ...marketingThemeVars(t), minHeight: "100vh", background: "var(--tmt-paper)", color: "var(--tmt-ink)", display: "flex", flexDirection: "column", fontFamily: "var(--tmt-sans)" }}>
       {/* Header — same chrome as legal pages */}
-      <header style={{ borderBottom: `1px solid ${t.borderSoft}`, padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <header style={{ borderBottom: `1px solid ${t.borderSoft}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Link to="/" style={{ ...LINK_RESET, display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: t.accentSoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <BookOpen size={16} style={{ color: t.accent, transform: "translateY(1px)" }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>TailorMyText</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--tmt-ink)" }}>TailorMyText</span>
         </Link>
-        <Link to="/" style={{ ...LINK_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: t.fgSoft, padding: "6px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: "transparent" }}>
+        <Link to="/" style={{ ...LINK_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--tmt-ink-soft)", padding: "8px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: "var(--tmt-paper-card)" }}>
           <ArrowLeft size={13} /> Back to app
         </Link>
       </header>
 
       {/* Main */}
-      <main style={{ flex: 1, padding: "40px 24px 60px", display: "flex", justifyContent: "center" }}>
-        <div style={{ width: "100%", maxWidth: 520 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 740, color: t.fg, margin: "0 0 24px", letterSpacing: "-0.02em" }}>Account</h1>
+      <main style={{ flex: 1, padding: "60px 24px 80px", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 560 }}>
+          <span className="tmt-label" style={{ display: "block", marginBottom: 10 }}>Settings · Profile</span>
+          <h1 className="tmt-display" style={{ fontSize: 44, fontWeight: 360, color: "var(--tmt-ink)", margin: "0 0 32px", letterSpacing: "-0.02em", lineHeight: 1.05 }}>Account</h1>
 
           {/* Account info */}
-          <div style={{ padding: "18px 16px", borderRadius: 12, background: t.surface, marginBottom: 24, display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={{ padding: "22px 22px", borderRadius: 14, background: "var(--tmt-paper-card)", border: `1px solid ${t.borderSoft}`, marginBottom: 24, display: "flex", flexDirection: "column", gap: 24 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <Mail size={14} style={{ color: t.icon, flexShrink: 0 }} />
               <div>
-                <div style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em" }}>Email</div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "var(--tmt-ink-muted)", textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "var(--tmt-mono)" }}>Email</div>
                 <div style={{ fontSize: 13, color: t.fg, fontWeight: 600, marginTop: 3 }}>{user.email}</div>
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <Shield size={14} style={{ color: t.icon, flexShrink: 0 }} />
               <div>
-                <div style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em" }}>Sign-in method</div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "var(--tmt-ink-muted)", textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "var(--tmt-mono)" }}>Sign-in method</div>
                 <div style={{ fontSize: 13, color: t.fg, fontWeight: 600, marginTop: 3 }}>
                   {isGoogleAccount ? "Google" : "Email & password"}
                 </div>
@@ -231,7 +233,7 @@ export default function Account() {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <BadgeCheck size={14} style={{ color: t.icon, flexShrink: 0 }} />
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em" }}>TailorMyText role</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: "var(--tmt-ink-muted)", textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "var(--tmt-mono)" }}>TailorMyText role</div>
                   <div style={{ fontSize: 13, color: t.fg, fontWeight: 600, marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     {isOwner && (
                       <>
@@ -248,7 +250,7 @@ export default function Account() {
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <Calendar size={14} style={{ color: t.icon, flexShrink: 0 }} />
               <div>
-                <div style={{ fontSize: 11, fontWeight: 650, color: t.fgSoft, textTransform: "uppercase", letterSpacing: "0.05em" }}>Member since</div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "var(--tmt-ink-muted)", textTransform: "uppercase", letterSpacing: "0.14em", fontFamily: "var(--tmt-mono)" }}>Member since</div>
                 <div style={{ fontSize: 13, color: t.fg, fontWeight: 600, marginTop: 3 }}>{formatDate(memberSince)}</div>
                 {lastSignIn && (
                   <span style={{
@@ -266,7 +268,7 @@ export default function Account() {
           </div>
 
           {/* Change password */}
-          <div style={{ padding: "18px 16px", borderRadius: 12, background: t.surface }}>
+          <div style={{ padding: "22px 22px", borderRadius: 14, background: "var(--tmt-paper-card)", border: `1px solid ${t.borderSoft}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <KeyRound size={14} style={{ color: t.icon }} />
               <div style={{ fontSize: 13, fontWeight: 700, color: t.fg }}>
@@ -320,7 +322,7 @@ export default function Account() {
           </div>
 
           {/* Export your data */}
-          <div style={{ padding: "18px 16px", borderRadius: 12, background: t.surface, marginTop: 24 }}>
+          <div style={{ padding: "22px 22px", borderRadius: 14, background: "var(--tmt-paper-card)", border: `1px solid ${t.borderSoft}`, marginTop: 24 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <Download size={14} style={{ color: t.icon }} />
               <div style={{ fontSize: 13, fontWeight: 700, color: t.fg }}>

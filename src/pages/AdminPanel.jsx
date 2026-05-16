@@ -17,8 +17,7 @@ import { storageGet } from "../utils/storage";
 import { useToast } from "../components/Toast";
 import BookLoader from "../components/BookLoader";
 import Footer from "../components/Footer";
-import { DiaTextReveal } from "../components/DiaTextReveal";
-import { getRevealColors } from "../config/themeColors";
+import { marketingThemeVars } from "../utils/marketingTheme";
 import RoadmapTab from "./admin/RoadmapTab";
 
 const LINK_RESET = { color: "inherit", textDecoration: "none" };
@@ -637,37 +636,28 @@ export default function AdminPanel() {
   if (!isAuthorized) return null;
 
   return (
-    <div style={{ minHeight: "100vh", background: t.bg, color: t.fg, display: "flex", flexDirection: "column", fontFamily: "'DM Sans', sans-serif" }}>
-      <header style={{ borderBottom: `1px solid ${t.borderSoft}`, padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div className="tmt-marketing" style={{ ...marketingThemeVars(t), minHeight: "100vh", background: "var(--tmt-paper)", color: "var(--tmt-ink)", display: "flex", flexDirection: "column", fontFamily: "var(--tmt-sans)" }}>
+      <header style={{ borderBottom: `1px solid ${t.borderSoft}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Link to="/" style={{ ...LINK_RESET, display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: t.accentSoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <BookOpen size={16} style={{ color: t.accent, transform: "translateY(1px)" }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>TailorMyText</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--tmt-ink)" }}>TailorMyText</span>
         </Link>
-        <Link to="/" style={{ ...LINK_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: t.fgSoft, padding: "6px 12px", borderRadius: 8, border: `1px solid ${t.border}`, background: "transparent" }}>
+        <Link to="/" style={{ ...LINK_RESET, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--tmt-ink-soft)", padding: "8px 14px", borderRadius: 10, border: `1px solid ${t.border}`, background: "var(--tmt-paper-card)" }}>
           <ArrowLeft size={13} /> Back to app
         </Link>
       </header>
 
-      <main style={{ flex: 1, padding: "32px 24px 60px", display: "flex", justifyContent: "center" }}>
+      <main style={{ flex: 1, padding: "48px 24px 80px", display: "flex", justifyContent: "center" }}>
         <div style={{ width: "100%", maxWidth: 1180 }}>
-          <div style={{ marginBottom: 20 }}>
-            <h1 style={{ fontSize: 32, fontWeight: 740, color: t.fg, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-              <DiaTextReveal
-                text="Admin Panel"
-                colors={getRevealColors(themeKey)}
-                textColor={t.fg}
-                duration={1.2}
-              />
+          <div style={{ marginBottom: 28 }}>
+            <span className="tmt-label" style={{ display: "block", marginBottom: 10 }}>Internal · Admin tools</span>
+            <h1 className="tmt-display" style={{ fontSize: 44, fontWeight: 360, color: "var(--tmt-ink)", margin: "0 0 10px", letterSpacing: "-0.02em", lineHeight: 1.05 }}>
+              Admin panel
             </h1>
-            <p style={{ fontSize: 13, color: t.fgSoft, margin: 0 }}>
-              <DiaTextReveal
-                text="User management, owner analytics, and Pro grants — restricted to admin or owner roles."
-                colors={getRevealColors(themeKey)}
-                textColor={t.fgSoft}
-                duration={1.5}
-              />
+            <p style={{ fontFamily: "var(--tmt-serif-body)", fontSize: 16, fontStyle: "italic", color: "var(--tmt-ink-soft)", margin: 0, lineHeight: 1.55 }}>
+              User management, owner analytics, and Pro grants &mdash; restricted to admin or owner roles.
             </p>
           </div>
 

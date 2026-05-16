@@ -64,19 +64,20 @@ export default function UserMenu({ t, onShowAuth, onShowAvatarSettings, onShowSu
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 12, boxShadow: "0 12px 36px rgba(0,0,0,0.18)", minWidth: 220, overflow: "hidden", zIndex: 999, outline: "none" }}
+          style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 14, boxShadow: "0 18px 44px rgba(0,0,0,0.22)", minWidth: 240, overflow: "hidden", zIndex: 999, outline: "none" }}
         >
           {/* Profile header — not interactive */}
-          <div style={{ padding: "12px 14px", borderBottom: `1px solid ${t.borderSoft}`, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ padding: "14px 14px", borderBottom: `1px solid ${t.borderSoft}`, display: "flex", alignItems: "center", gap: 12 }}>
             <Avatar avatar={avatar} initial={initial} accent={t.accent} size={36} />
             <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', ui-monospace, monospace", fontSize: 9.5, fontWeight: 600, color: t.fgSoft, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 2 }}>Signed in</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: t.fg, fontFamily: "'DM Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                 {role !== "user" && (
-                  <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 650, fontFamily: "'DM Sans', sans-serif", background: roleColor.bg, color: roleColor.text }}>{roleLabel}</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 8px", borderRadius: 8, fontSize: 9.5, fontWeight: 700, fontFamily: "'IBM Plex Mono', ui-monospace, monospace", letterSpacing: "0.1em", textTransform: "uppercase", background: roleColor.bg, color: roleColor.text }}>{roleLabel}</span>
                 )}
                 {isProGrantActive && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 650, fontFamily: "'DM Sans', sans-serif", background: GIFT_BADGE.bg, color: GIFT_BADGE.text }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 8, fontSize: 9.5, fontWeight: 700, fontFamily: "'IBM Plex Mono', ui-monospace, monospace", letterSpacing: "0.1em", textTransform: "uppercase", background: GIFT_BADGE.bg, color: GIFT_BADGE.text }}>
                     <Gift size={11} /> Gift
                   </span>
                 )}

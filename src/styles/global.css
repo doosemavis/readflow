@@ -172,6 +172,38 @@ button:active {
 
 .rf-para { opacity: 1; transition: opacity 0.35s ease; content-visibility: auto; contain-intrinsic-size: auto 120px; }
 
+/* Chapter-jump override: content-visibility:auto + the 1200px placeholder
+   yields a wrong scroll target because getBoundingClientRect reads the
+   placeholder, not the real height. App.jsx adds .rf-nav-jump to the
+   scroll container for the duration of the jump so every section renders
+   its real size before we compute the scroll offset, then removes it. */
+.rf-reader-scroll.rf-nav-jump .rf-section,
+.rf-reader-scroll.rf-nav-jump .rf-para { content-visibility: visible; }
+
+/* Chapter reveal — two-layer fade:
+   1. Wrapper fades 0 → 1 over 280ms (envelope; title becomes visible).
+   2. Paragraphs additionally fade 0 → 1 over 800ms with 200ms delay
+      (body materialises slowly behind the title).
+   Effective: title appears in ~280ms, body finishes around 1000ms. Title
+   leads because paragraph opacity multiplies with wrapper opacity — the
+   paragraph fade is invisible while the wrapper is still ramping up.
+   This replaced the DiaTextReveal sweep on titles, which was costing a
+   ~900ms RAF gradient loop on every chapter jump. */
+@keyframes rf-wrapper-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes rf-body-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.rf-doc-wrapper.rf-chapter-reveal {
+  animation: rf-wrapper-fade-in 280ms ease-out backwards;
+}
+.rf-doc-wrapper.rf-chapter-reveal .rf-para {
+  animation: rf-body-fade-in 800ms ease-out 200ms backwards;
+}
+
 /* FocusMode: cursor activated by CSS class, not re-render */
 .rf-focus-mode .rf-para { cursor: pointer; }
 
@@ -277,4 +309,283 @@ button:active {
   src: url('https://cdn.jsdelivr.net/gh/antijingoist/opendyslexic@master/compiled/OpenDyslexic-Italic.woff2') format('woff2'),
        url('https://cdn.jsdelivr.net/gh/antijingoist/opendyslexic@master/compiled/OpenDyslexic-Italic.woff') format('woff');
   font-weight: 400; font-style: italic; font-display: swap;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   MARKETING AESTHETIC (.tmt-marketing scope)
+
+   Editorial soft-organic look used on pre-auth surfaces: landing
+   marketing sections, AuthModal, PricingModal, PaywallModal,
+   CheckoutModal loader, ContactModal, LegalLayout, Footer.
+
+   Scoped to .tmt-marketing so it can't bleed into the reader,
+   theme-aware modals, or the AdminPanel. Inside this scope the
+   typography defaults to Newsreader serif; headings use Fraunces;
+   labels use IBM Plex Mono.
+
+   Use .tmt-static on any <button> inside .tmt-marketing that should
+   opt out of the global game-button ledge mechanic (most marketing
+   pill buttons want the cleaner editorial look).
+   ──────────────────────────────────────────────────────────────────── */
+
+.tmt-marketing {
+  --tmt-paper:        #F2EBDD;
+  --tmt-paper-deep:   #E8DEC9;
+  --tmt-paper-card:   #F8F2E5;
+  --tmt-ink:          #1F1812;
+  --tmt-ink-soft:     #4A3F33;
+  --tmt-ink-muted:    #7C6E5C;
+  --tmt-rule:         #D6C9B1;
+
+  --tmt-terra:        #B0512E;
+  --tmt-terra-deep:   #8A3E22;
+  --tmt-sage:         #4F7156;
+  --tmt-sand:         #D9B07F;
+
+  --tmt-serif-display: 'Fraunces', 'Times New Roman', serif;
+  --tmt-serif-body:    'Newsreader', Georgia, serif;
+  --tmt-mono:          'IBM Plex Mono', ui-monospace, monospace;
+
+  --tmt-radius:        14px;
+  --tmt-radius-lg:     28px;
+  --tmt-easing:        cubic-bezier(.22,.61,.36,1);
+
+  font-family: var(--tmt-serif-body);
+  font-optical-sizing: auto;
+  color: var(--tmt-ink);
+}
+
+/* Atmosphere — paper grain overlay positioned by the page wrapper */
+.tmt-grain {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.12  0 0 0 0 0.09  0 0 0 0 0.07  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.32'/></svg>");
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+.tmt-blobs {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.tmt-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  animation: tmt-drift 42s cubic-bezier(.22,.61,.36,1) infinite alternate;
+}
+.tmt-blob.b1 {
+  width: 620px; height: 620px; top: -180px; left: -160px;
+  background: radial-gradient(circle at 30% 30%, #D9B07F, transparent 70%);
+}
+.tmt-blob.b2 {
+  width: 540px; height: 540px; top: 38%; right: -180px;
+  background: radial-gradient(circle at 50% 50%, #C97A5A, transparent 70%);
+  animation-duration: 48s; animation-delay: -8s; opacity: 0.28;
+}
+.tmt-blob.b3 {
+  width: 700px; height: 700px; bottom: -260px; left: 25%;
+  background: radial-gradient(circle at 40% 60%, #A8BC9C, transparent 70%);
+  animation-duration: 54s; animation-delay: -22s; opacity: 0.24;
+}
+@keyframes tmt-drift {
+  0%   { transform: translate(0,0)         scale(1); }
+  50%  { transform: translate(40px,-30px)  scale(1.06); }
+  100% { transform: translate(-30px,40px)  scale(0.96); }
+}
+
+/* Typographic primitives */
+.tmt-marketing .tmt-eyebrow {
+  font-family: var(--tmt-mono);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--tmt-terra);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.tmt-marketing .tmt-eyebrow.sage   { color: var(--tmt-sage); }
+.tmt-marketing .tmt-eyebrow.muted  { color: var(--tmt-ink-muted); }
+.tmt-marketing .tmt-eyebrow.lead::before {
+  content: '';
+  width: 22px; height: 1px;
+  background: currentColor;
+}
+
+.tmt-marketing .tmt-display {
+  font-family: var(--tmt-serif-display);
+  font-weight: 380;
+  letter-spacing: -0.025em;
+  color: var(--tmt-ink);
+  font-variation-settings: "opsz" 144, "SOFT" 80;
+  line-height: 1.05;
+}
+.tmt-marketing .tmt-display em {
+  font-style: italic;
+  font-weight: 380;
+  color: var(--tmt-terra);
+  font-variation-settings: "opsz" 144, "SOFT" 100;
+}
+.tmt-marketing .tmt-display .underline {
+  position: relative;
+  white-space: nowrap;
+}
+.tmt-marketing .tmt-display .underline::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -2px;
+  height: 14px;
+  background: var(--tmt-sand);
+  opacity: 0.55;
+  z-index: -1;
+  transform: skewX(-4deg);
+}
+
+.tmt-marketing .tmt-label {
+  font-family: var(--tmt-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--tmt-ink-muted);
+}
+
+/* Marketing CTA — editorial typography (Fraunces/mono cap label) but the
+   tactile game-button mechanic from the rest of the app (raised ledge +
+   press-down + brightness shift). Compose with `.rf-btn-solid` to get the
+   gradient sheen + inset rim lighting on top of the terra base. Button
+   radius is 12px (matches the existing app's button language), not the
+   999px pill from the original landing-concept mock. */
+.tmt-marketing .tmt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--tmt-terra);
+  color: var(--tmt-paper);
+  font-family: var(--tmt-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+  padding: 13px 22px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap; /* Keep editorial pills on a single line so labels
+                          never wrap into a taller button than their siblings. */
+  /* No box-shadow / transform declared here — the global `button` rule and
+     `.rf-btn-solid` (when composed) provide the raised ledge + press-down
+     game-button mechanic. This keeps the editorial CTA tactile instead of
+     flat. */
+}
+.tmt-marketing .tmt-btn.ghost {
+  background: var(--tmt-paper-card);
+  color: var(--tmt-ink);
+  border: 1px solid var(--tmt-rule);
+}
+.tmt-marketing .tmt-btn.ghost:hover {
+  background: var(--tmt-paper-deep);
+  border-color: var(--tmt-ink-muted);
+}
+.tmt-marketing .tmt-btn.ink {
+  background: var(--tmt-ink);
+  color: var(--tmt-paper);
+}
+.tmt-marketing .tmt-btn.ink:hover {
+  background: #2A2118;
+}
+
+/* Italic ghost link (e.g. "See what changes →") */
+.tmt-marketing .tmt-ghost-link {
+  font-family: var(--tmt-serif-body);
+  font-style: italic;
+  font-size: 16px;
+  color: var(--tmt-ink-soft);
+  text-decoration: none;
+  border-bottom: 1px solid var(--tmt-rule);
+  padding-bottom: 2px;
+  transition: color 0.25s cubic-bezier(.22,.61,.36,1),
+              border-color 0.25s cubic-bezier(.22,.61,.36,1);
+}
+.tmt-marketing .tmt-ghost-link:hover {
+  color: var(--tmt-ink);
+  border-color: var(--tmt-ink);
+}
+
+/* Pill for trust badges, plan tags, etc. */
+.tmt-marketing .tmt-pill {
+  display: inline-block;
+  font-family: var(--tmt-mono);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--tmt-ink-muted);
+  border: 1px solid var(--tmt-rule);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+/* Card surface — used by hero copy panels, condition tiles, plan cards. */
+.tmt-marketing .tmt-card {
+  background: var(--tmt-paper-card);
+  border: 1px solid var(--tmt-rule);
+  border-radius: var(--tmt-radius);
+  padding: 32px;
+}
+
+/* Neutralize the inherited button-ledge transforms on .tmt-static so
+   .tmt-btn keeps its own editorial shadow language across all variants. */
+.tmt-marketing .tmt-static,
+.tmt-marketing .tmt-static:hover,
+.tmt-marketing .tmt-static:active {
+  filter: none !important;
+}
+.tmt-marketing .tmt-btn.tmt-static {
+  box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset,
+              0 12px 28px -12px rgba(176,81,46,0.55) !important;
+}
+.tmt-marketing .tmt-btn.tmt-static:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset,
+              0 18px 36px -14px rgba(138,62,34,0.65) !important;
+}
+.tmt-marketing .tmt-btn.tmt-static:active {
+  transform: translateY(0) !important;
+}
+.tmt-marketing .tmt-btn.ink.tmt-static {
+  box-shadow: 0 1px 0 rgba(255,255,255,0.15) inset,
+              0 12px 28px -14px rgba(31,24,18,0.55) !important;
+}
+.tmt-marketing .tmt-btn.ghost.tmt-static,
+.tmt-marketing .tmt-btn.ghost.tmt-static:hover,
+.tmt-marketing .tmt-btn.ghost.tmt-static:active {
+  box-shadow: none !important;
+}
+
+/* Landing hero — 2-column editorial layout, stacks at narrow widths. */
+.tmt-marketing .tmt-hero {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 72px;
+  align-items: start;
+  padding: 64px 40px 80px;
+  max-width: 1240px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+@media (max-width: 980px) {
+  .tmt-marketing .tmt-hero {
+    grid-template-columns: 1fr;
+    gap: 48px;
+    padding: 40px 24px 60px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tmt-blob { animation: none; }
 }
