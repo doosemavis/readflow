@@ -16,6 +16,7 @@ import { MAX_RECENT_DOCS } from "../config/constants";
 import { storageGet, storageDel, storageGcOrphanChunks, storageGcUnscopedKeys } from "./storage";
 
 const BUCKET = "documents";
+const LIBRARY_BUCKET = "library";
 
 function docPath(userId, docId) {
   return `${userId}/${docId}.json`;
@@ -32,7 +33,7 @@ export async function cloudListRecent(userId) {
   requireUserId(userId);
   const { data, error } = await supabase
     .from("recent_docs")
-    .select("id, name, timestamp, chunks")
+    .select("id, name, timestamp, chunks, source, book_id")
     .eq("user_id", userId)
     .order("timestamp", { ascending: false })
     .limit(MAX_RECENT_DOCS);
@@ -130,12 +131,145 @@ export async function cloudLoadDoc(userId, entry) {
   }
 }
 
-// Remove a doc entirely (storage object + recent_docs row).
+// Remove a recent-docs entry. Source-aware:
+//   - Upload entries: delete the storage blob too (user's own per-user file).
+//   - Library entries: leave the shared blob and library_reads alone — only
+//     hide from Recent Documents. The book stays in the catalog; if the user
+//     re-opens it from the Library section, their saved position is intact.
 export async function cloudRemoveDoc(userId, id) {
   requireUserId(userId);
-  await supabase.storage.from(BUCKET).remove([docPath(userId, id)]);
+
+  const { data: row } = await supabase
+    .from("recent_docs")
+    .select("source")
+    .eq("user_id", userId)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (row?.source !== "library") {
+    // Upload entry (or pre-migration row without a source value — default
+    // to upload behavior). Library entries skip storage removal because
+    // the blob is shared across users.
+    await supabase.storage.from(BUCKET).remove([docPath(userId, id)]);
+  }
+
   const { error } = await supabase.from("recent_docs").delete().eq("user_id", userId).eq("id", id);
   if (error) throw error;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Library — curated Project Gutenberg books, shared across all users.
+//
+// Catalog lives in public.library_books (read-anyone-authed).
+// EPUB blobs live in the public 'library' Storage bucket at {uuid}.epub.
+// Per-user reading state lives in public.library_reads (RLS per user_id).
+//
+// Tier enforcement: catalog SELECT is open (so the UI can show every book
+// to every user, locked or not). cloudOpenLibraryBook is the gate — Pro
+// books refuse to load for free users and return a `gated` result that
+// the caller turns into a PaywallModal.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Fetch the full library catalog ordered by popularity. Tier filtering
+// happens at load time, not here — the UI shows the whole catalog so
+// free users can see (and be tempted by) the Pro titles.
+export async function cloudListLibrary() {
+  const { data, error } = await supabase
+    .from("library_books")
+    .select("id, gutenberg_id, title, author, publication_date, edition, chapter_count, word_count, reading_time_min, tier_required, popularity_rank, blob_path, byte_size")
+    .order("popularity_rank", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// Open a library book — tier-gated.
+//
+// Returns:
+//   { blob, book }              — success; hand `blob` to the existing
+//                                  EPUB parser (same one upload uses).
+//   { gated: true, requiredTier, book } — caller should pop PaywallModal.
+//   null                        — book missing or blob unreachable.
+//
+// Side effects on success:
+//   - upserts library_reads to bump last_open (preserves any prior position)
+//   - mirrors into recent_docs with source='library' so the entry surfaces
+//     in Recent Documents on next render (per the v1 UX rule).
+export async function cloudOpenLibraryBook(userId, bookId, userIsPro) {
+  requireUserId(userId);
+
+  const { data: book, error: bookErr } = await supabase
+    .from("library_books")
+    .select("*")
+    .eq("id", bookId)
+    .single();
+  if (bookErr || !book) return null;
+
+  if (book.tier_required === "pro" && !userIsPro) {
+    return { gated: true, requiredTier: "pro", book };
+  }
+
+  const { data: blob, error: dlErr } = await supabase.storage
+    .from(LIBRARY_BUCKET)
+    .download(book.blob_path);
+  if (dlErr || !blob) return null;
+
+  // Mirror into recent_docs. id = book.id (uuid) so re-opens dedup
+  // cleanly; source column disambiguates from upload entries.
+  const { error: rdErr } = await supabase
+    .from("recent_docs")
+    .upsert({
+      id: book.id,
+      user_id: userId,
+      name: book.title,
+      timestamp: Date.now(),
+      chunks: 1,
+      source: "library",
+      book_id: book.id,
+    }, { onConflict: "user_id,id" });
+  if (rdErr) console.warn("[cloudDocs] failed to mirror library book into recent_docs:", rdErr.message);
+
+  // Fire-and-forget: bump last_open on library_reads. Position (if any)
+  // is preserved by the partial-update shape of this upsert.
+  supabase
+    .from("library_reads")
+    .upsert(
+      { user_id: userId, book_id: book.id, last_open: new Date().toISOString() },
+      { onConflict: "user_id,book_id" }
+    )
+    .then(({ error }) => {
+      if (error) console.warn("[cloudDocs] failed to upsert library_reads:", error.message);
+    });
+
+  return { blob, book };
+}
+
+// Persist reading position for a library book. Mirrors how upload
+// position memory works, but stored in library_reads instead of in
+// the per-user documents bucket. `position` shape is opaque to the
+// schema — the reader picks the format (section index + offset today).
+export async function cloudSaveLibraryPosition(userId, bookId, position) {
+  requireUserId(userId);
+  const { error } = await supabase
+    .from("library_reads")
+    .upsert(
+      { user_id: userId, book_id: bookId, position, last_open: new Date().toISOString() },
+      { onConflict: "user_id,book_id" }
+    );
+  if (error) throw error;
+}
+
+// Fetch a previously-saved reading position. Returns null if the user
+// has never opened this book or has no saved position.
+export async function cloudLoadLibraryPosition(userId, bookId) {
+  requireUserId(userId);
+  const { data, error } = await supabase
+    .from("library_reads")
+    .select("position, last_open")
+    .eq("user_id", userId)
+    .eq("book_id", bookId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data;
 }
 
 // One-time migration: lift any docs from the previous localStorage layout
