@@ -14,3 +14,9 @@ TAILORMYTEXT_CONTEXT.md
 # Strategic / launch planning notes — local reference only.
 TAILORMYTEXT_LAUNCH_PLAN.md
 .gstack/
+
+# Gutenberg ingest pipeline — binary caches (large) and per-book reports.
+# library_seed.json + ingest_gutenberg.mjs ARE committed; only working outputs are ignored.
+scripts/.cache/
+scripts/.cache-stripped/
+scripts/validation-report/
