@@ -3,6 +3,7 @@ export { DiaTextReveal } from "./DiaTextReveal";
 export { default as UploadBadge } from "./UploadBadge";
 export { SidebarRecentDocs, LandingRecentDocs } from "./RecentDocsList";
 export { LibrarySection } from "./LibrarySection";
+export { default as LibraryTeaseSection } from "./LibraryTeaseSection";
 export { LandingBookshelf, SidebarBookshelf } from "./BookshelfList";
 export { default as DocumentBody } from "./DocumentBody";
 export { useReadingGuide } from "./ReadingGuideOverlay";

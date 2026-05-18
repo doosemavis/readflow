@@ -78,7 +78,7 @@ import { useToast } from "./components/Toast";
 import HeroFeatureFlip from "./components/HeroFeatureFlip";
 import {
   Toggle, Slider, Segment, Section, FontPicker, Tip,
-  UploadBadge, SidebarRecentDocs, LandingRecentDocs, LibrarySection,
+  UploadBadge, SidebarRecentDocs, LandingRecentDocs, LibrarySection, LibraryTeaseSection,
   LandingBookshelf, SidebarBookshelf,
   DocumentBody, useReadingGuide,
   UserMenu, PendingDeletionBanner, PostDeletionLockoutBanner,
@@ -1301,6 +1301,14 @@ export default function App() {
         <section style={{ position: "relative", zIndex: 2, padding: "100px 24px 60px", borderTop: `1px solid var(--tmt-rule)`, maxWidth: 1240, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center" }}>
           <LibrarySection books={library.books} isPro={sub.isPro} onOpen={openLibraryBook} />
         </section>
+      )}
+
+      {/* ─── ANONYMOUS LIBRARY TEASE — same slot, different surface.
+          Hints at the curated catalog (era-classified spines, no titles)
+          and routes the visitor to AuthModal via "Get a library card."
+          Sign-in surfaces the real Reading Room as a pleasant surprise. */}
+      {!user && (
+        <LibraryTeaseSection onSignUp={() => setShowAuth(true)} t={t} />
       )}
 
       {/* ═══════════════ MARKETING — CONDITIONS GRID ═══════════════
