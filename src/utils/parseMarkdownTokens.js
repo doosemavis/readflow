@@ -35,7 +35,29 @@
 
 import { marked } from "marked";
 
-const HEADING_NEW_SECTION_DEPTH = 2; // depth 1 + 2 start sections; 3+ inline
+// Pick the section-break depth dynamically per document instead of
+// hardcoding h1. Rule: the smallest heading depth that occurs ≥ 2 times
+// is the section boundary; if no depth repeats, fall back to the
+// smallest depth present. This adapts to:
+//   - "# Ch1 ## Sub # Ch2 # Ch3" → h1 splits (3 chapters)
+//   - "# Title ## A ## B ## C" → h2 splits (h1 = doc title, 3 chapters)
+//   - h4-only docs → h4 splits
+// Anything ABOVE the chosen depth becomes inline content; anything BELOW
+// stays inline as a ## sub-heading marker.
+function pickSectionDepth(tokens) {
+  const counts = new Map();
+  for (const t of tokens) {
+    if (t.type === "heading") {
+      counts.set(t.depth, (counts.get(t.depth) || 0) + 1);
+    }
+  }
+  if (counts.size === 0) return Infinity; // no headings → no splits
+  // Smallest depth with count >= 2.
+  const repeated = [...counts.entries()].filter(([_, c]) => c >= 2).map(([d]) => d);
+  if (repeated.length > 0) return Math.min(...repeated);
+  // Otherwise smallest depth at all (single-heading-of-its-kind docs).
+  return Math.min(...counts.keys());
+}
 
 function renderInline(tokens) {
   if (!Array.isArray(tokens)) return "";
@@ -158,8 +180,21 @@ function appendContent(section, text) {
   section.content = section.content ? `${section.content}\n\n${text}` : text;
 }
 
+// Strip YAML/TOML front matter at file head. marked doesn't treat
+// `---\n...\n---` as a special construct — without this prepass it sees
+// the lower `---` as a setext underline for the metadata lines, which
+// then leak into the first section's content as a heading.
+function stripFrontMatter(md) {
+  // Allow leading whitespace/BOM. Match either `---\n...\n---` (YAML) or
+  // `+++\n...\n+++` (TOML, Hugo convention).
+  const m = md.match(/^﻿?\s*(---|\+\+\+)\n[\s\S]*?\n\1\s*\n?/);
+  return m ? md.slice(m[0].length) : md;
+}
+
 export function parseMarkdownTokens(md) {
-  const tokens = marked.lexer(md);
+  const tokens = marked.lexer(stripFrontMatter(md));
+  const sectionDepth = pickSectionDepth(tokens);
+
   const sections = [];
   let sectionNum = 0;
   let current = { type: "document", title: null, number: 1, content: "" };
@@ -171,7 +206,7 @@ export function parseMarkdownTokens(md) {
   }
 
   for (const token of tokens) {
-    if (token.type === "heading" && token.depth <= HEADING_NEW_SECTION_DEPTH) {
+    if (token.type === "heading" && token.depth === sectionDepth) {
       // Close previous section and open a new one.
       pushIfNonEmpty();
       sectionNum += 1;
@@ -184,7 +219,13 @@ export function parseMarkdownTokens(md) {
       continue;
     }
     if (token.type === "heading") {
-      // h3+ becomes an inline heading prefix on its own line.
+      if (token.depth < sectionDepth) {
+        // Heading shallower than the chapter depth → doc-level title.
+        // Drop (the dynamic depth rule already decided this depth is NOT
+        // a section break, so it's metadata).
+        continue;
+      }
+      // Deeper than section depth → inline subsection marker.
       const marker = "#".repeat(Math.min(token.depth, 6));
       const text = renderInline(token.tokens || []);
       appendContent(current, `${marker} ${text}`);

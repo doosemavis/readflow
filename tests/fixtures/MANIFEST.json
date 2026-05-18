@@ -76,8 +76,8 @@
   },
   "binary-as-md.md": {
     "format": "md",
-    "purpose": "Correctly-typed .md — content sniffer (Phase 2) confirms 'md' but App.jsx skips the route-change log since sniff matches extension",
-    "expectedSections": 2,
+    "purpose": "Correctly-typed .md — content sniffer (Phase 2) confirms 'md' but App.jsx skips the route-change log since sniff matches extension. Single h1 + h2 inline = 1 section under new convention.",
+    "expectedSections": 1,
     "expectedSniff": "md"
   },
   "escape-sequences.md": {

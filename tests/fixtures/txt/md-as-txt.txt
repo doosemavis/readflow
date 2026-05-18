@@ -12,13 +12,13 @@ Here is some **bold text** and a [link to somewhere](https://example.com).
 const code = "fenced block";
 ```
 
-## Chapter Two: The Middle
+# Chapter Two: The Middle
 
 > A blockquote line
 > Continued blockquote
 
 More body text.
 
-## Chapter Three: The End
+# Chapter Three: The End
 
 Closing thoughts.

@@ -51,37 +51,77 @@ describe("parseHTMLStructured — script/style stripping (Task 4.1)", () => {
   });
 });
 
-describe("parseHTMLStructured — h1–h6 heading detection (Task 4.2)", () => {
-  it("splits sections at h4 (previously silently flattened)", () => {
-    const html = `<html><body>
-      <h4>Chapter 1</h4>
-      <p>Body of chapter 1.</p>
-      <h4>Chapter 2</h4>
-      <p>Body of chapter 2.</p>
-      <h4>Chapter 3</h4>
-      <p>Body of chapter 3.</p>
-    </body></html>`;
-    const sections = parseHTMLStructured(html);
-    expect(sections).toHaveLength(3);
-    expect(sections.map((s) => s.title)).toEqual(["Chapter 1", "Chapter 2", "Chapter 3"]);
-  });
-
-  it("splits sections at h5 and h6 too", () => {
-    const html = `<html><body>
-      <h5>A</h5><p>body</p>
-      <h6>B</h6><p>body</p>
-    </body></html>`;
-    const sections = parseHTMLStructured(html);
-    expect(sections).toHaveLength(2);
-  });
-
-  it("happy-path: h1 still works", () => {
+describe("parseHTMLStructured — heading detection (Task 4.2 + 90% push)", () => {
+  it("happy-path: h1 splits chapters", () => {
     const html = `<html><body>
       <h1>One</h1><p>x</p>
       <h1>Two</h1><p>y</p>
     </body></html>`;
     const sections = parseHTMLStructured(html);
     expect(sections).toHaveLength(2);
+  });
+
+  it("dynamic depth: repeated h2's split chapters when h1 is the lone doc title", () => {
+    // Same dynamic-depth rule as parseMarkdownTokens: smallest depth that
+    // repeats (≥2 occurrences) is the section break. A lone h1 (doc title)
+    // above repeated h2's flips the break to h2.
+    const html = `<html><body>
+      <h1>Doc Title</h1>
+      <h2>Section A</h2>
+      <p>body a</p>
+      <h2>Section B</h2>
+      <p>body b</p>
+    </body></html>`;
+    const sections = parseHTMLStructured(html);
+    expect(sections).toHaveLength(2);
+    expect(sections.map((s) => s.title)).toEqual(["Section A", "Section B"]);
+  });
+
+  it("when h1 repeats, h2 stays inline (typical chapter+subsection doc)", () => {
+    const html = `<html><body>
+      <h1>Ch1</h1><p>body</p>
+      <h2>Sub</h2><p>still ch1</p>
+      <h1>Ch2</h1><p>body</p>
+    </body></html>`;
+    const sections = parseHTMLStructured(html);
+    expect(sections).toHaveLength(2);
+    expect(sections.map((s) => s.title)).toEqual(["Ch1", "Ch2"]);
+    expect(sections[0].content).toContain("## Sub");
+  });
+});
+
+describe("parseHTMLStructured — semantic container recursion (90% push)", () => {
+  it("recurses through <article> wrappers to find headings", () => {
+    const html = `<html><body>
+      <article>
+        <h1>Real Title</h1>
+        <p>Body.</p>
+      </article>
+    </body></html>`;
+    const [s] = parseHTMLStructured(html);
+    expect(s.title).toBe("Real Title");
+    expect(s.content).toContain("Body");
+  });
+
+  it("recurses through <section> wrappers", () => {
+    const html = `<html><body>
+      <section><h1>A</h1><p>body a</p></section>
+      <section><h1>B</h1><p>body b</p></section>
+    </body></html>`;
+    const sections = parseHTMLStructured(html);
+    expect(sections).toHaveLength(2);
+    expect(sections.map((s) => s.title)).toEqual(["A", "B"]);
+  });
+
+  it("drops <footer> entirely (boilerplate copyright)", () => {
+    const html = `<html><body>
+      <h1>Article</h1>
+      <p>Real paragraph.</p>
+      <footer>Copyright 1999, do not read.</footer>
+    </body></html>`;
+    const [s] = parseHTMLStructured(html);
+    expect(s.content).toContain("Real paragraph");
+    expect(s.content).not.toContain("Copyright 1999");
   });
 });
 

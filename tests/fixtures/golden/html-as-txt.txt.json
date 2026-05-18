@@ -1,8 +1,20 @@
 [
   {
-    "type": "document",
-    "title": null,
+    "type": "chapter",
+    "title": "Chapter 1: The Beginning",
     "number": 1,
-    "content": "<!DOCTYPE html>\n<html>\n<head><title>An Article</title></head>\n<body>\n<h1>Chapter 1: The Beginning</h1>\n<p>This is the first paragraph of an article that was saved with a .txt extension by mistake.</p>\n\n<h1>Chapter 2: The Middle</h1>\n<p>Here is the second part. The sniffer should route this to the HTML parser instead of plain text.</p>\n\n<h1>Chapter 3: The End</h1>\n<p>And the closing thoughts of the piece.</p>\n</body>\n</html>"
+    "content": "This is the first paragraph of an article that was saved with a .txt extension by mistake."
+  },
+  {
+    "type": "chapter",
+    "title": "Chapter 2: The Middle",
+    "number": 2,
+    "content": "Here is the second part. The sniffer should route this to the HTML parser instead of plain text."
+  },
+  {
+    "type": "chapter",
+    "title": "Chapter 3: The End",
+    "number": 3,
+    "content": "And the closing thoughts of the piece."
   }
 ]

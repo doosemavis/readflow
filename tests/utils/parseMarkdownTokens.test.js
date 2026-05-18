@@ -26,11 +26,35 @@ describe("parseMarkdownTokens — section boundaries", () => {
     expect(sections[1]).toMatchObject({ type: "chapter", title: "Two", number: 2 });
   });
 
-  it("starts a new section at h2 as well", () => {
-    const md = "## A\n\nbody\n\n## B\n\nbody";
+  it("repeated h1's split sections; lone h1 + repeated h2's flips to h2 splits", () => {
+    // Dynamic-depth rule: the smallest depth occurring ≥2 times is the
+    // section break. For "# Title ## A ## B" with body text in between,
+    // h2 becomes the chapter break, the lone h1 is dropped as doc-title
+    // metadata, and pre-chapter body becomes a leading "document" section
+    // so the intro is preserved.
+    const md = "# Document Title\n\nIntro.\n\n## Chapter A\n\nbody\n\n## Chapter B\n\nbody";
+    const sections = parseMarkdownTokens(md);
+    expect(sections).toHaveLength(3);
+    expect(sections[0].type).toBe("document");
+    expect(sections[0].content).toContain("Intro.");
+    expect(sections.slice(1).map((s) => s.title)).toEqual(["Chapter A", "Chapter B"]);
+  });
+
+  it("lone h1 with NO intro body collapses to just the chapters", () => {
+    // semantic-sections.html shape: h1 doc title + repeated chapter headings.
+    // No intro means the leading "document" section is empty and skipped.
+    const md = "# Document Title\n\n## Chapter A\n\nbody\n\n## Chapter B\n\nbody";
     const sections = parseMarkdownTokens(md);
     expect(sections).toHaveLength(2);
-    expect(sections.map((s) => s.title)).toEqual(["A", "B"]);
+    expect(sections.map((s) => s.title)).toEqual(["Chapter A", "Chapter B"]);
+  });
+
+  it("when h1 repeats, h2 stays inline (clean-doc.md fixture)", () => {
+    const md = "# Ch1\n\nbody\n\n## Sub\n\nstill ch1\n\n# Ch2\n\nbody";
+    const sections = parseMarkdownTokens(md);
+    expect(sections).toHaveLength(2);
+    expect(sections.map((s) => s.title)).toEqual(["Ch1", "Ch2"]);
+    expect(sections[0].content).toContain("## Sub");
   });
 
   it("h3+ does NOT start a section; it becomes an inline ## / ### heading", () => {
@@ -150,11 +174,19 @@ describe("parseMarkdownTokens — edge cases", () => {
     expect(s.content).not.toContain("__not italic__");
   });
 
-  it("setext headings (=== / ---) work the same as ATX", () => {
-    const md = "First Heading\n=============\n\nBody one.\n\nSecond Heading\n--------------\n\nBody two.";
+  it("setext h1 (=== underline) splits sections; setext h2 (---) stays inline", () => {
+    const md = "First Heading\n=============\n\nBody one.\n\nA Sub-Heading\n--------------\n\nBody two.";
+    const sections = parseMarkdownTokens(md);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].title).toBe("First Heading");
+    expect(sections[0].content).toContain("## A Sub-Heading");
+  });
+
+  it("setext h1 with multiple === sections produces multiple chapters", () => {
+    const md = "Chapter A\n=========\n\nBody A.\n\nChapter B\n=========\n\nBody B.";
     const sections = parseMarkdownTokens(md);
     expect(sections).toHaveLength(2);
-    expect(sections.map((s) => s.title)).toEqual(["First Heading", "Second Heading"]);
+    expect(sections.map((s) => s.title)).toEqual(["Chapter A", "Chapter B"]);
   });
 
   it("YAML front matter does NOT appear in any section's content", () => {

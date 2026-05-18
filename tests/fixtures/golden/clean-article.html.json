@@ -9,18 +9,12 @@
     "type": "chapter",
     "title": "Chapter 2",
     "number": 2,
-    "content": "The second chapter follows the same pattern.\n\nTwo paragraphs is enough for the parser to confirm the section boundary."
-  },
-  {
-    "type": "chapter",
-    "title": "A sub-section",
-    "number": 3,
-    "content": "Within a chapter, h2 marks sub-sections. The renderer should treat these as inline headings."
+    "content": "The second chapter follows the same pattern.\n\nTwo paragraphs is enough for the parser to confirm the section boundary.\n\n## A sub-section\n\nWithin a chapter, h2 marks sub-sections. The renderer should treat these as inline headings."
   },
   {
     "type": "chapter",
     "title": "Chapter 3",
-    "number": 4,
+    "number": 3,
     "content": "Final chapter of the test fixture."
   }
 ]
