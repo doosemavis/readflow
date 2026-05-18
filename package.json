@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "eval": "node scripts/eval-parsers.mjs"
   },
   "dependencies": {
     "@radix-ui/colors": "^3.0.0",
@@ -32,7 +36,10 @@
   "devDependencies": {
     "@types/react": "^18.3.3",
     "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/ui": "^3.2.4",
+    "happy-dom": "^20.9.0",
     "jszip": "^3.10.1",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "vitest": "^3.2.4"
   }
 }
