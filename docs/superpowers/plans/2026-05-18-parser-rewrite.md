@@ -787,21 +787,58 @@ COMMENT ON COLUMN public.recent_docs.chapter_overrides IS
 
 ---
 
-# Phase 7 — LLM Fallback (v2, gated)
+# Phase 7 — ML-Assisted Parsing (v2, shelved by default — hard burden of proof to activate)
 
-**Not built.** Only triggers if Phase 5 evals show <0.45 confidence cases are common AND the user-confirmation-via-Edit-Chapters affordance isn't enough.
+**Default: NOT built.** Phase 7 only activates if the eval harness PROVES that Phase 5's regex + confidence-scoring approach genuinely fails on a meaningful slice of real user uploads, AND the user-editable "Edit Chapters" UI from Phase 5 is insufficient to recover that quality.
 
-Acceptance criteria to GREEN-LIGHT v2:
-- Phase 0/5 metrics show ≥10% of real-user uploads land at confidence <0.45
-- User feedback indicates the "single document" fallback is the dominant complaint
+## Activation bar (per project policy 2026-05-18)
 
-Design (if activated):
-- Opt-in toggle in account settings: "Use AI for chapter detection on uncertain documents"
-- Supabase Edge function `improve-chapter-detection`
-- Anthropic Claude Haiku, 1-3s round-trip, ~$0.0005/parse
-- Send ONLY the proposed-heading lines + 2 lines of context each, not the full doc
-- User can revoke consent → cached LLM outputs are deleted
-- Cache results per document hash so re-opens don't re-pay
+User-set policy: *"Phase 7 should not be implemented unless it is 100% necessary to assist in the quality of our app being able to intake document uploads, parsing, and then outputting the document to the user in the way that is expected from us as an app product."*
+
+The bar is therefore:
+- Phase 5 eval metrics show ≥10% of real-user uploads land at confidence <0.45 AND those uploads are NOT recoverable via "Edit Chapters" (i.e. the user can't reasonably fix them)
+- User feedback consistently reports the parsing quality as the dominant complaint after Phase 5 ships
+- "Maybe it would be a bit better" is NOT sufficient justification
+- Document this with concrete numbers in a written go/no-go memo BEFORE building anything in Phase 7
+
+## Privacy constraint (absolute, per project policy 2026-05-18)
+
+**No user document content leaves their device.** This is a hard constraint, not a tradeoff.
+
+The original "Supabase Edge → Anthropic API" sketch is **off the table.** It violates the policy by definition — chapter detection inherently requires the model to see the text. There is no way to send "just the structural metadata" of a document and still get useful chapter detection back.
+
+Acceptable architectures (if Phase 7 ever activates):
+
+**Option A — In-browser ML classifier**
+- Use `transformers.js` (Hugging Face) or `web-llm` to run a small model entirely client-side
+- Model artifact (~10-50 MB) downloads once, caches in browser. After first load, fully offline.
+- Inference happens in a Web Worker so the main thread stays responsive
+- No network call after the initial model download; document text never leaves the device
+- Cost: bundle/cache footprint, slower on low-end devices, ceiling capped by what a small model can do
+
+**Option B — Improved deterministic heuristics (preferred fallback)**
+- No ML at all. More sophisticated regex grammars, statistical features (paragraph-position scoring, font/whitespace signals when format provides them, document-length-based heading-count priors)
+- Trivially private — same execution model as Phase 5, just smarter heuristics
+- Lower ceiling than ML, but no bundle cost and no inference latency
+- This is the **preferred path** if Phase 5 turns out insufficient — try harder heuristics before reaching for a model
+
+**Option C (explicitly rejected):** ANY architecture that sends document content to a third-party API. This includes Anthropic, OpenAI, any cloud LLM provider, and any Supabase Edge function that proxies to one. Off the table by policy.
+
+## Implementation outline (if activated, Option A path)
+
+1. **Selection step:** evaluate 2-3 candidate small models on the same eval-harness fixtures used in Phase 0. Document the chosen model's accuracy ceiling vs Phase 5 baseline.
+2. **Bundle integration:** load model lazily (only when a low-confidence document is opened); cache in IndexedDB or via the browser's Cache API.
+3. **Worker integration:** model inference runs in `parser.worker.js` or a dedicated `ml.worker.js` so it never blocks the reader.
+4. **Opt-in toggle:** account settings adds "Improve chapter detection with on-device AI" — off by default. User explicitly opts in even though the data never leaves their device, so they consciously choose to download the model bundle.
+5. **Result caching:** keyed per document hash, stored in localStorage or IndexedDB, so re-opens are instant.
+6. **Telemetry boundary:** if any telemetry/usage data is collected, it includes only anonymized success/failure flags (was inference confident? did the user accept the result?). NEVER the document content or chapter titles.
+
+## Implementation outline (if activated, Option B path)
+
+1. Expand the heuristic grammar to handle more legitimate heading variants (foreign-language, ornamental, numbered-clause, etc.)
+2. Add statistical features that the current scoring doesn't use: relative paragraph length around candidate headings, font-size signals when format supplies them, paragraph-position priors
+3. Add format-specific specialists — heuristics tuned per format (e.g. plain-text-of-OCR vs plain-text-of-novel)
+4. Re-run eval harness, measure improvement. If it clears the activation bar, no Phase 7 model needed.
 
 ---
 
