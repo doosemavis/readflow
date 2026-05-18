@@ -844,11 +844,15 @@ export default function App() {
     setLoading(true); setLoadMsg("Loading saved document…");
     try {
       const data = await recentDocs.loadDoc(entry);
-      if (data) {
+      if (data && !data.error) {
         setText(data.text); setDocSections(data.sections); setFileName(data.name);
         setCurrentDocId(entry.id);
         setCurrentDocSource("upload");
         setReaderOpen(true);
+      } else if (data?.error === "corrupted") {
+        setText("This document file is damaged and can't be opened. Please re-upload the original.");
+        setDocSections(null); setFileName(data.name || entry.name); setCurrentDocId(null);
+        setCurrentDocSource(null);
       } else {
         setText("Document no longer available. Try uploading it again.");
         setDocSections(null); setFileName(entry.name); setCurrentDocId(null);

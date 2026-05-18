@@ -154,13 +154,28 @@ export async function cloudLoadDoc(userId, entry) {
     .then(({ error: upErr }) => {
       if (upErr) console.warn("[cloudDocs] failed to refresh last_accessed_at:", upErr.message);
     });
+  // Two distinguishable failure modes:
+  //   - null            → blob is missing on the server (handled above)
+  //   - { error: ... }  → blob downloaded but its contents are unusable
+  // App.jsx can show different user copy for each ("re-upload" vs "damaged").
+  let text;
   try {
-    const text = await blob.text();
-    const d = JSON.parse(text);
-    return { sections: d.sections, text: d.text, name: entry.name };
-  } catch {
-    return null;
+    text = await blob.text();
+  } catch (err) {
+    console.warn("[cloudDocs] blob.text() failed:", err.message);
+    return { error: "corrupted", name: entry.name };
   }
+  let d;
+  try {
+    d = JSON.parse(text);
+  } catch (err) {
+    console.warn("[cloudDocs] document JSON parse failed:", err.message);
+    return { error: "corrupted", name: entry.name };
+  }
+  if (!d || typeof d !== "object") {
+    return { error: "corrupted", name: entry.name };
+  }
+  return { sections: d.sections, text: d.text, name: entry.name };
 }
 
 // Remove a recent-docs entry. Source-aware:
