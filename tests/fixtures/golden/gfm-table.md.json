@@ -3,7 +3,7 @@
     "type": "chapter",
     "title": "A document with a table",
     "number": 1,
-    "content": "The data below summarizes the quarterly results:\n\n| Quarter | Revenue | Growth |\n| ------- | ------- | ------ |\n| Q1      | $12K    | 5%     |\n| Q2      | $18K    | 8%     |\n| Q3      | $22K    | 12%    |"
+    "content": "The data below summarizes the quarterly results:\n\nQ1 | $12K | 5%\nQ2 | $18K | 8%\nQ3 | $22K | 12%\nQ4 | $31K | 14%"
   },
   {
     "type": "chapter",

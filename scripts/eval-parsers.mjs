@@ -32,6 +32,9 @@ globalThis.document = win.document;
 // Dynamic import AFTER the polyfill is in place.
 const { detectTextStructure, parseHTMLStructured, parseMarkdownStructured } =
   await import("../src/utils/detectStructure.js");
+const { parseMarkdownTokens } = await import("../src/utils/parseMarkdownTokens.js");
+const { USE_MARKDOWN_TOKEN_PARSER } = await import("../src/config/constants.js");
+const mdParser = USE_MARKDOWN_TOKEN_PARSER ? parseMarkdownTokens : parseMarkdownStructured;
 
 const MANIFEST_PATH = join(ROOT, "tests/fixtures/MANIFEST.json");
 const GOLDEN_DIR = join(ROOT, "tests/fixtures/golden");
@@ -43,7 +46,7 @@ if (!existsSync(GOLDEN_DIR)) mkdirSync(GOLDEN_DIR, { recursive: true });
 // Text-format dispatch only. PDF/EPUB/DOCX skipped — see header comment.
 const DISPATCH = {
   txt: (text) => detectTextStructure(text),
-  md: (text) => parseMarkdownStructured(text),
+  md: (text) => mdParser(text),
   html: (text) => parseHTMLStructured(text),
 };
 

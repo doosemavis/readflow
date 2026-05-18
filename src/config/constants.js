@@ -60,6 +60,17 @@ export const FREE_UPLOAD_LIMIT = 3;
 export const TRIAL_DAYS = 14;
 export const MAX_RECENT_DOCS = 5;
 
+// Phase 3 of the parser rewrite. When true, .md uploads go through
+// parseMarkdownTokens (marked.lexer + adapter). When false, they go
+// through the legacy parseMarkdownStructured (regex preprocessor +
+// detectTextStructure). Both paths emit the same Section[] shape per
+// PARSER_CONTRACT.md so the renderer is unaffected by the flip.
+//
+// Flag exists to allow a fast rollback if the new parser regresses on
+// real-world Markdown after deploy. Task 3.4 (deferred) removes the
+// legacy path after a soak period with the flag on.
+export const USE_MARKDOWN_TOKEN_PARSER = true;
+
 // Supabase plan caps for the AdminPanel capacity widgets. Bump together
 // when promoting Free → Pro (1 GB → 100 GB storage; 500 MB → 8 GB DB).
 //

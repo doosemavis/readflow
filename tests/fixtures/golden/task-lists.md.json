@@ -3,7 +3,7 @@
     "type": "chapter",
     "title": "Project Checklist",
     "number": 1,
-    "content": "The release plan has the following outstanding items:\n\n- [ ] Finish the database migration\n- [x] Update the documentation\n- [ ] Re-run the integration tests\n- [x] Notify the team"
+    "content": "The release plan has the following outstanding items:\n\n- Finish the database migration\n- Update the documentation\n- Re-run the integration tests\n- Notify the team"
   },
   {
     "type": "chapter",

@@ -20,7 +20,9 @@
 // explicit import keeps the dependency clear at the file boundary.
 
 import { detectTextStructure, parseMarkdownStructured } from "../utils/detectStructure";
+import { parseMarkdownTokens } from "../utils/parseMarkdownTokens";
 import { analyzePDF } from "./pdfAnalysis";
+import { USE_MARKDOWN_TOKEN_PARSER } from "../config/constants";
 
 self.onmessage = (e) => {
   const { id, type, payload } = e.data || {};
@@ -33,7 +35,12 @@ self.onmessage = (e) => {
         sections = detectTextStructure(payload);
         break;
       case "parse-md":
-        sections = parseMarkdownStructured(payload);
+        // Phase 3: flag selects between marked.lexer + adapter (default)
+        // and the legacy regex preprocessor. Both emit the same Section[]
+        // shape so the renderer doesn't care which ran.
+        sections = USE_MARKDOWN_TOKEN_PARSER
+          ? parseMarkdownTokens(payload)
+          : parseMarkdownStructured(payload);
         break;
       case "parse-pdf":
         // payload: { rawPages, resolvedOutline, debug }
