@@ -32,8 +32,21 @@ function getWorker() {
     const entry = pending.get(id);
     if (!entry) return; // late reply for a discarded promise
     pending.delete(id);
-    if (error) entry.reject(new Error(error));
-    else entry.resolve(sections);
+    if (error) {
+      // Rehydrate the error so its name and stack survive the postMessage
+      // boundary. Falls back to a bare Error if the worker only sent a
+      // string (kept for compatibility with any older worker payloads).
+      if (typeof error === "string") {
+        entry.reject(new Error(error));
+      } else {
+        const rehydrated = new Error(error.message || "Parser worker error");
+        if (error.name) rehydrated.name = error.name;
+        if (error.stack) rehydrated.stack = error.stack;
+        entry.reject(rehydrated);
+      }
+    } else {
+      entry.resolve(sections);
+    }
   };
 
   // Catch-all: malformed messages, unhandled rejections inside the worker

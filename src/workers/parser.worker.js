@@ -47,9 +47,16 @@ self.onmessage = (e) => {
     self.postMessage({ id, sections });
   } catch (err) {
     // Errors don't structured-clone cleanly across the postMessage boundary
-    // (the Error object's stack and constructor get lost). Convert to a
-    // plain string on the worker side; the main thread re-throws as a
-    // standard Error so caller catch blocks see a normal exception.
-    self.postMessage({ id, error: String(err?.message || err) });
+    // (Error.constructor, .stack, and any custom properties get dropped).
+    // Previously we serialized to a plain string, which lost the error
+    // name and stack — the main thread re-threw as a generic Error with
+    // no provenance, making parser bugs hard to trace.
+    //
+    // Now serialize { message, name, stack }; parserWorker.js rebuilds an
+    // Error with the original name + stack preserved.
+    const errorPayload = err instanceof Error
+      ? { message: err.message, name: err.name, stack: err.stack }
+      : { message: String(err), name: "Error", stack: undefined };
+    self.postMessage({ id, error: errorPayload });
   }
 };
