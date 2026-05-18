@@ -1,3 +1,6 @@
+// CONTRACT: posts back Section[] per docs/architecture/PARSER_CONTRACT.md.
+// Phase 3 will swap the MD path to a marked.lexer() token→section adapter.
+//
 // Parser Worker (Phase 2: text + Markdown only).
 //
 // Runs the worker-safe parsers off the main thread so document parsing

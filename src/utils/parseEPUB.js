@@ -1,5 +1,9 @@
 import { loadScript } from "./scriptLoader";
 
+// CONTRACT: emits Section[] per docs/architecture/PARSER_CONTRACT.md.
+// Sections have type:"chapter", title from NCX/h1-h3 (null if neither),
+// number from spine order, content in the private pseudo-Markdown format.
+//
 // NOTE on main-thread vs worker placement (Phase 4 decision, 2026-05-13):
 //
 // parseEPUB stays on the main thread for now. The blocker is `DOMParser` +

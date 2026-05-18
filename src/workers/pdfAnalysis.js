@@ -1,3 +1,8 @@
+// CONTRACT: produces Section[] per docs/architecture/PARSER_CONTRACT.md.
+// type:"chapter" (outline-derived) or "page" (per-page fallback).
+// Sets titleSizeRatio when measurable. Embeds {r:RATIO} line markers
+// in content so the renderer preserves font-size hierarchy.
+//
 // Worker-side PDF analysis. Imported by src/workers/parser.worker.js.
 //
 // Same heuristics as the original (main-thread) parsePDF.js — column

@@ -1,3 +1,9 @@
+// CONTRACT: emits Section[] per docs/architecture/PARSER_CONTRACT.md.
+// Sections have type:"chapter" (outline-derived) or "page" (per-page),
+// title from PDF outline entry / first font-tiered heading (null if neither),
+// number from outline index or page number, content in the private
+// pseudo-Markdown format. Sets titleSizeRatio when measurable.
+//
 // Main-thread PDF orchestrator. Thin shell around pdf.js + the parser worker.
 //
 // Why split: the original ~720-line parsePDF lived entirely on the main

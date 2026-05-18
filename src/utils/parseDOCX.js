@@ -1,6 +1,12 @@
 import mammoth from "mammoth";
 import { detectTextStructure } from "./detectStructure";
 
+// CONTRACT: emits Section[] per docs/architecture/PARSER_CONTRACT.md.
+// Currently emits type:"section" — Phase 4 of the parser-rewrite plan
+// harmonizes to type:"chapter". title from h1-h3 textContent (null if
+// no heading present in section), sequential number, content in the
+// private pseudo-Markdown format.
+//
 // NOTE: parseDOCX stays on main thread (same reasoning as parseEPUB).
 // Uses `new DOMParser().parseFromString(...)` to walk mammoth's HTML output;
 // DOMParser isn't available in standard Web Workers. DOCX files are

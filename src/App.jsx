@@ -710,6 +710,10 @@ export default function App() {
     doUpload(file);
   }, [user, sub.canUpload, sub.isLockedOut, sub.maxFileSize, sub.isPro, showToast]);
 
+  // doUpload is the parser dispatcher. Each branch must produce Section[]
+  // per docs/architecture/PARSER_CONTRACT.md (see §4 for the dispatch
+  // protocol — fullText is joined from sections for the empty-content
+  // guard, then setDocSections feeds the renderer).
   const doUpload = useCallback(async (file) => {
     setLoading(true); setLoadMsg("Reading file…");
     let sections;
