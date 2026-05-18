@@ -44,7 +44,10 @@ function flattenOutline(items, depth = 0, out = []) {
 // Resolve a pdf.js destination to a 1-indexed page number. Returns null when
 // the destination can't be resolved (broken outline entry, dead link, etc.) —
 // the worker filters those out.
-async function resolveDestToPage(doc, dest) {
+//
+// Logs at warn level instead of swallowing. The aggregate warn (when many
+// entries fail) is emitted by resolveOutlineSafe, not here.
+export async function resolveDestToPage(doc, dest) {
   try {
     let resolved = dest;
     if (typeof resolved === "string") resolved = await doc.getDestination(resolved);
@@ -52,8 +55,43 @@ async function resolveDestToPage(doc, dest) {
       const pageIdx = await doc.getPageIndex(resolved[0]);
       return pageIdx + 1;
     }
-  } catch {}
+  } catch (err) {
+    console.warn("[parsePDF] outline destination resolution failed:", err.message);
+  }
   return null;
+}
+
+// Fetch + flatten + resolve the outline. Returns null on hard failure
+// (getOutline throws or returns nothing) so the caller falls back to the
+// per-page section path. When the outline is mostly broken (>50% of
+// entries can't be resolved to a page), emit a louder warn so we know
+// the outline is unreliable — useful telemetry as the parser rewrite
+// progresses.
+export async function resolveOutlineSafe(doc) {
+  let outline;
+  try {
+    outline = await doc.getOutline();
+  } catch (err) {
+    console.warn("[parsePDF] outline fetch failed:", err.message);
+    return null;
+  }
+  if (!outline || outline.length === 0) return null;
+
+  const flat = flattenOutline(outline);
+  const entries = await Promise.all(
+    flat.map(async (entry) => ({
+      title: entry.title,
+      depth: entry.depth,
+      page: await resolveDestToPage(doc, entry.dest),
+    })),
+  );
+  const dropped = entries.filter((e) => e.page === null).length;
+  if (entries.length >= 2 && dropped / entries.length > 0.5) {
+    console.warn(
+      `[parsePDF] outline is mostly broken: ${dropped}/${entries.length} entries could not be resolved`,
+    );
+  }
+  return entries;
 }
 
 export async function parsePDF(file) {
@@ -85,20 +123,7 @@ export async function parsePDF(file) {
   // Resolve outline destinations on the main thread (workers can't call
   // doc.getDestination / doc.getPageIndex). The worker gets a flat list of
   // { title, page, depth } and doesn't need pdf.js at all.
-  let resolvedOutline = null;
-  try {
-    const outline = await doc.getOutline();
-    if (outline && outline.length > 0) {
-      const flat = flattenOutline(outline);
-      resolvedOutline = await Promise.all(
-        flat.map(async (entry) => ({
-          title: entry.title,
-          depth: entry.depth,
-          page: await resolveDestToPage(doc, entry.dest),
-        })),
-      );
-    }
-  } catch {}
+  const resolvedOutline = await resolveOutlineSafe(doc);
 
   // Diagnostics flag — the worker has no localStorage, so we read here and
   // pass the resolved boolean across.
