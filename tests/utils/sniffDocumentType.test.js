@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { sniffDocumentType } from "../../src/utils/sniffDocumentType.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURES = join(__dirname, "..", "fixtures");
 
 // sniffDocumentType decides what parser to dispatch when the file
 // extension is unreliable. Two roles:
@@ -90,5 +96,38 @@ describe("sniffDocumentType — extension-wins guardrail", () => {
   it("returns null when no clear signal — caller falls back to extension", async () => {
     const buf = bufFrom("Just some plain prose. Nothing structural.");
     expect(await sniffDocumentType("essay.txt", buf)).toBeNull();
+  });
+});
+
+describe("sniffDocumentType — against the Phase 2 dispatch fixtures", () => {
+  // Loads the real fixtures so the sniffer's heuristics are validated
+  // against the same files App.jsx will encounter at upload time. If
+  // someone tweaks the heuristics and one of these flips, the eval
+  // baseline + dispatch story is at risk and we want a red test.
+  function loadBuffer(format, name) {
+    // Node's Buffer.buffer points into a shared pool — slicing into a fresh
+    // ArrayBuffer scopes the bytes to just this file.
+    const b = readFileSync(join(FIXTURES, format, name));
+    return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+  }
+
+  it("html-as-txt.txt routes to 'html'", async () => {
+    expect(await sniffDocumentType("html-as-txt.txt", loadBuffer("txt", "html-as-txt.txt"))).toBe("html");
+  });
+
+  it("md-as-txt.txt routes to 'md'", async () => {
+    expect(await sniffDocumentType("md-as-txt.txt", loadBuffer("txt", "md-as-txt.txt"))).toBe("md");
+  });
+
+  it("binary-as-md.md sniffs as 'md' (confirming the extension; no upgrade fires)", async () => {
+    // The sniffer's contract: returns the confidently-detected type whenever
+    // it has one, regardless of whether that matches the extension. The
+    // CALLER (App.jsx doUpload) decides if `sniffed !== rawExt` and only
+    // logs+routes when it's an actual change.
+    expect(await sniffDocumentType("binary-as-md.md", loadBuffer("md", "binary-as-md.md"))).toBe("md");
+  });
+
+  it("clean-novel.txt is plain prose and gets no upgrade (null)", async () => {
+    expect(await sniffDocumentType("clean-novel.txt", loadBuffer("txt", "clean-novel.txt"))).toBeNull();
   });
 });

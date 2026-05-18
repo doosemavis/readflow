@@ -56,11 +56,29 @@
     "purpose": "Page-of-N markers (Page 1 of 200) embedded in body text — should NOT be section breaks",
     "expectedSections": 1
   },
+  "html-as-txt.txt": {
+    "format": "txt",
+    "purpose": "HTML body saved with .txt extension — content sniffer (Phase 2) should upgrade dispatch to parseHTMLStructured",
+    "expectedSections": 3,
+    "expectedSniff": "html"
+  },
+  "md-as-txt.txt": {
+    "format": "txt",
+    "purpose": "Markdown body saved with .txt extension — content sniffer (Phase 2) should upgrade dispatch to parseMarkdownStructured",
+    "expectedSections": 3,
+    "expectedSniff": "md"
+  },
 
   "clean-doc.md": {
     "format": "md",
     "purpose": "Happy-path Markdown with # headings",
     "expectedSections": 3
+  },
+  "binary-as-md.md": {
+    "format": "md",
+    "purpose": "Correctly-typed .md — content sniffer (Phase 2) confirms 'md' but App.jsx skips the route-change log since sniff matches extension",
+    "expectedSections": 2,
+    "expectedSniff": "md"
   },
   "escape-sequences.md": {
     "format": "md",

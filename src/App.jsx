@@ -63,7 +63,7 @@ const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, 
 // in two visual columns. Add new themes to the appropriate array — order within each is the row order.
 const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
 const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
-import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, parseInWorker, runThemeTransition } from "./utils";
+import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, parseInWorker, runThemeTransition, sniffDocumentType } from "./utils";
 import { storageGet, storageSet, storageDel } from "./utils/storage";
 import { supabase } from "./utils/supabase";
 import { track } from "./utils/track";
@@ -732,14 +732,25 @@ export default function App() {
   const doUpload = useCallback(async (file) => {
     setLoading(true); setLoadMsg("Reading file…");
     let sections;
-    const ext = file.name.split(".").pop().toLowerCase();
+    const rawExt = file.name.split(".").pop().toLowerCase();
+    let ext = rawExt;
     try {
       // Guard: reject anything outside the supported allowlist. Without this,
       // an image (.jpg/.png) or audio file falls through to the plain-text
       // branch and `.text()` decodes its binary bytes as UTF-8 garbage —
       // user sees a screen of gibberish instead of a clear error.
-      if (!SUPPORTED_EXTS.has(ext)) {
-        throw new Error(`TailorMyText doesn't support .${ext} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, JSON).`);
+      if (!SUPPORTED_EXTS.has(rawExt)) {
+        throw new Error(`TailorMyText doesn't support .${rawExt} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, JSON).`);
+      }
+      // Phase 2 sniff: route by content when the extension is wrong (a
+      // .txt that's actually HTML, a renamed binary, etc.). Sniffer is
+      // pure inspection of the file head; it never overrides a known
+      // binary extension. Falls back to the user's extension on null.
+      const sniffBuf = await file.arrayBuffer();
+      const sniffed = await sniffDocumentType(file.name, sniffBuf);
+      if (sniffed && sniffed !== rawExt) {
+        console.warn(`[doUpload] sniffer routed .${rawExt} → .${sniffed} based on content`);
+        ext = sniffed;
       }
       if (ext === "pdf") { setLoadMsg("Loading PDF engine…"); sections = await parsePDF(file); }
       else if (ext === "epub") { setLoadMsg("Unpacking EPUB…"); sections = await parseEPUB(file); }
