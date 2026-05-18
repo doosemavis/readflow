@@ -64,7 +64,7 @@ const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, 
 const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
 const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, parseInWorker, runThemeTransition } from "./utils";
-import { storageGet, storageSet } from "./utils/storage";
+import { storageGet, storageSet, storageDel } from "./utils/storage";
 import { supabase } from "./utils/supabase";
 import { track } from "./utils/track";
 import { useSubscription } from "./hooks/useSubscription";
@@ -582,7 +582,14 @@ export default function App() {
       } else {
         const stored = await storageGet(`pos:${currentDocId}`);
         if (cancelled || !stored) return;
-        try { pos = JSON.parse(stored); } catch { return; }
+        try {
+          pos = JSON.parse(stored);
+        } catch (err) {
+          // Corrupt scroll-position key would loop on every open. Log + clear.
+          console.warn(`[App] corrupt scroll position for doc ${currentDocId}; clearing:`, err.message);
+          storageDel(`pos:${currentDocId}`);
+          return;
+        }
       }
       if (cancelled || !pos) return;
       const sectionIdx = Number(pos?.sectionIdx) || 0;
@@ -858,7 +865,19 @@ export default function App() {
         setDocSections(null); setFileName(entry.name); setCurrentDocId(null);
         setCurrentDocSource(null);
       }
-    } catch { setText("Error loading saved document."); setDocSections(null); setCurrentDocId(null); setCurrentDocSource(null); }
+    } catch (err) {
+      console.warn("[App] loadRecentDoc threw:", err);
+      // Network failures from fetch/Supabase typically surface as TypeError
+      // with "fetch failed" / "NetworkError" / "Failed to fetch". Anything
+      // else falls through to the generic message.
+      const msg = String(err?.message || "");
+      if (/fetch|network/i.test(msg)) {
+        setText("Couldn't reach the server to load this document. Check your connection and try again.");
+      } else {
+        setText("Error loading saved document.");
+      }
+      setDocSections(null); setCurrentDocId(null); setCurrentDocSource(null);
+    }
     finally { setLoading(false); setLoadMsg(""); }
   }, [recentDocs, openLibraryBook]);
 
