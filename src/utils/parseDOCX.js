@@ -18,6 +18,22 @@ import { detectTextStructure } from "./detectStructure";
 export async function parseDOCX(file) {
   const buf = await file.arrayBuffer();
   const result = await mammoth.convertToHtml({ arrayBuffer: buf });
+
+  // mammoth surfaces problems via result.messages. Warnings are common
+  // (unsupported style mapping, unknown smart-tags) and we just log them.
+  // An error-typed message means mammoth couldn't process some hard part
+  // of the doc — fail loudly so App.jsx shows a real error.
+  if (Array.isArray(result.messages) && result.messages.length > 0) {
+    const errors = result.messages.filter((m) => m.type === "error");
+    const warnings = result.messages.filter((m) => m.type === "warning");
+    if (warnings.length > 0) {
+      console.warn("[parseDOCX] mammoth warnings:", warnings.map((m) => m.message));
+    }
+    if (errors.length > 0) {
+      throw new Error(`DOCX conversion failed: ${errors[0].message}`);
+    }
+  }
+
   const doc = new DOMParser().parseFromString(result.value, "text/html");
   const sections = [];
   let currentTitle = null;
@@ -38,6 +54,10 @@ export async function parseDOCX(file) {
   flush();
 
   if (sections.length === 0) {
+    // mammoth produced HTML but it had no headings — we've lost structure.
+    // Surface the fallback in logs so a degraded parse doesn't masquerade
+    // as a clean one.
+    console.warn("[parseDOCX] no headings detected — falling back to extractRawText (structure lost)");
     const raw = (await mammoth.extractRawText({ arrayBuffer: buf })).value;
     return detectTextStructure(raw);
   }
