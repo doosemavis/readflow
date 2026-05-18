@@ -577,8 +577,16 @@ export default function App() {
       // per-device per-doc, never leaves the browser.
       let pos = null;
       if (currentDocSource === "library" && user?.id) {
-        const row = await cloudLoadLibraryPosition(user.id, currentDocId);
-        pos = row?.position ?? null;
+        try {
+          const row = await cloudLoadLibraryPosition(user.id, currentDocId);
+          pos = row?.position ?? null;
+        } catch (err) {
+          // Server reachable but returned an error (RLS, network). Fall
+          // back to top-of-book and surface the error in the console;
+          // we don't toast here to avoid blocking the reader.
+          console.warn("[App] cloudLoadLibraryPosition failed; starting from top:", err.message);
+          return;
+        }
       } else {
         const stored = await storageGet(`pos:${currentDocId}`);
         if (cancelled || !stored) return;
@@ -817,7 +825,10 @@ export default function App() {
         setShowPricing(true);
         return;
       }
-      const { blob, book } = result;
+      const { blob, book, mirrorError } = result;
+      if (mirrorError) {
+        showToast("Your bookshelf may not refresh until you reload.", "warning", 5000);
+      }
       setLoadMsg("Unpacking EPUB…");
       const sections = await parseEPUB(blob);
       const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
