@@ -27,16 +27,40 @@ function requireUserId(userId) {
   return userId;
 }
 
-// List this user's recent docs, newest first. RLS scopes results to the
-// current auth.uid() too, so the .eq is belt-and-suspenders.
+// List this user's recent uploaded docs (i.e. NOT library books), newest
+// first. Library entries are kept in a parallel index — see
+// cloudListBookshelf. RLS scopes results to the current auth.uid() too,
+// so the .eq is belt-and-suspenders.
+//
+// Pre-migration rows (before recent_docs.source existed) have source IS NULL
+// and are treated as uploads, matching the column's DEFAULT 'upload' for
+// new rows.
 export async function cloudListRecent(userId) {
   requireUserId(userId);
   const { data, error } = await supabase
     .from("recent_docs")
     .select("id, name, timestamp, chunks, source, book_id")
     .eq("user_id", userId)
+    .or("source.is.null,source.neq.library")
     .order("timestamp", { ascending: false })
     .limit(MAX_RECENT_DOCS);
+  if (error) throw error;
+  return data ?? [];
+}
+
+// List this user's bookshelf — library books they've previously opened,
+// newest first. Distinct from cloudListRecent because uploads and library
+// entries are conceptually different (you BORROW from the library; you
+// OWN your uploads). The library catalog is small (≤20 books), so this
+// is naturally bounded without needing the MAX_RECENT_DOCS trim.
+export async function cloudListBookshelf(userId) {
+  requireUserId(userId);
+  const { data, error } = await supabase
+    .from("recent_docs")
+    .select("id, name, timestamp, chunks, source, book_id")
+    .eq("user_id", userId)
+    .eq("source", "library")
+    .order("timestamp", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
@@ -52,14 +76,17 @@ export async function cloudSaveDoc(userId, name, sections, fullText) {
   const payload = JSON.stringify({ sections, text: fullText });
   const path = docPath(userId, id);
 
-  // Dedup-by-name: find any prior row with this name and remove its
-  // storage object + table row first.
+  // Dedup-by-name: find any prior UPLOAD row with this name and remove its
+  // storage object + table row first. Library rows with the same name (a
+  // user uploaded "Pride and Prejudice.epub" earlier and also added the
+  // library edition) are left alone — they live in a different bucket and
+  // belong to the bookshelf, not the uploads list.
   const { data: existing } = await supabase
     .from("recent_docs")
-    .select("id")
+    .select("id, source")
     .eq("user_id", userId)
     .eq("name", name);
-  const priorIds = (existing ?? []).map(r => r.id);
+  const priorIds = (existing ?? []).filter(r => r.source !== "library").map(r => r.id);
   if (priorIds.length) {
     await supabase.storage.from(BUCKET).remove(priorIds.map(pid => docPath(userId, pid)));
     await supabase.from("recent_docs").delete().eq("user_id", userId).in("id", priorIds);
@@ -80,14 +107,19 @@ export async function cloudSaveDoc(userId, name, sections, fullText) {
     throw insErr;
   }
 
-  // Trim to MAX_RECENT_DOCS — fetch all this user's entries, drop anything
-  // past the limit (oldest by timestamp).
-  const { data: all } = await supabase
+  // Trim uploads to MAX_RECENT_DOCS — fetch all this user's UPLOAD entries
+  // and drop anything past the limit (oldest by timestamp). Library entries
+  // are excluded from the trim: they live in the user's bookshelf, are
+  // bounded by the small library catalog (~20 books), and removing them
+  // would orphan saved positions without freeing any of THIS user's
+  // storage (the blob is shared across the library bucket).
+  const { data: uploadRows } = await supabase
     .from("recent_docs")
     .select("id, timestamp")
     .eq("user_id", userId)
+    .or("source.is.null,source.neq.library")
     .order("timestamp", { ascending: false });
-  const overflow = (all ?? []).slice(MAX_RECENT_DOCS);
+  const overflow = (uploadRows ?? []).slice(MAX_RECENT_DOCS);
   if (overflow.length) {
     const overflowIds = overflow.map(r => r.id);
     await supabase.storage.from(BUCKET).remove(overflowIds.map(oid => docPath(userId, oid)));

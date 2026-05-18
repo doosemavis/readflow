@@ -3,7 +3,7 @@ import {
   Upload, FileText, Type, Palette, Eye, Sun, Moon, BookOpen,
   ChevronDown, X, Sparkles, Baseline, Highlighter, Underline as UnderlineIcon,
   EyeOff, MousePointer2, Focus, PanelLeftClose, PanelLeft,
-  Crown, Clock, Check, List, Lock,
+  Crown, Clock, Check, List, Lock, LibraryBig, ArrowLeft,
   AlignLeft, AlignCenter, AlignRight, AlignJustify
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -69,6 +69,8 @@ import { supabase } from "./utils/supabase";
 import { track } from "./utils/track";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
+import { useLibrary } from "./hooks/useLibrary";
+import { cloudOpenLibraryBook, cloudSaveLibraryPosition, cloudLoadLibraryPosition } from "./utils/cloudDocs";
 import { useAvatar } from "./hooks/useAvatar";
 import { useThemePreference } from "./hooks/useThemePreference";
 import { useAuth } from "./contexts/AuthContext";
@@ -76,10 +78,11 @@ import { useToast } from "./components/Toast";
 import HeroFeatureFlip from "./components/HeroFeatureFlip";
 import {
   Toggle, Slider, Segment, Section, FontPicker, Tip,
-  UploadBadge, SidebarRecentDocs, LandingRecentDocs,
+  UploadBadge, SidebarRecentDocs, LandingRecentDocs, LibrarySection,
+  LandingBookshelf, SidebarBookshelf,
   DocumentBody, useReadingGuide,
   UserMenu, PendingDeletionBanner, PostDeletionLockoutBanner,
-  DiaTextReveal, BookLoader, ErrorBoundary, Footer,
+  DiaTextReveal, BookLoader, ErrorBoundary, ReaderEmptyState, Footer,
 } from "./components";
 
 // Modals are conditionally rendered and not needed at first paint, so
@@ -92,6 +95,7 @@ const AuthModal            = lazy(() => import("./components/AuthModal"));
 const AvatarSettingsModal  = lazy(() => import("./components/AvatarSettingsModal"));
 const SubscriptionModal    = lazy(() => import("./components/SubscriptionModal"));
 const DeleteAccountModal   = lazy(() => import("./components/DeleteAccountModal"));
+const LibraryDrawer        = lazy(() => import("./components/LibraryDrawer"));
 
 export default function App() {
   // ── Document state ──
@@ -102,6 +106,15 @@ export default function App() {
   // reading position in localStorage so switching between docs and back
   // resumes at the right place.
   const [currentDocId, setCurrentDocId] = useState(null);
+  // "upload" | "library" | null. Distinguishes which storage layer drives
+  // the reading-position memory for the loaded doc: localStorage (uploads,
+  // per-device) vs library_reads (library, cross-device synced).
+  const [currentDocSource, setCurrentDocSource] = useState(null);
+  // Reader vs Landing visibility. Stays true after a doc is closed so the
+  // reader chrome (sidebar + empty-state prompt) keeps rendering instead of
+  // bouncing the user back to the landing page. Only the explicit
+  // "TailorMyText" back-button in the reader's top bar clears this.
+  const [readerOpen, setReaderOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [hoverUpload, setHoverUpload] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -289,11 +302,13 @@ export default function App() {
   // ── Subscription & modals ──
   const sub = useSubscription(role, user);
   const recentDocs = useRecentDocs(!authLoading, user?.id);
+  const library = useLibrary(!authLoading, user?.id);
   const [showPricing, setShowPricing] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [checkoutBilling, setCheckoutBilling] = useState("monthly");
   const [showChapterNav, setShowChapterNav] = useState(false);
+  const [showLibraryDrawer, setShowLibraryDrawer] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
 
@@ -557,10 +572,19 @@ export default function App() {
     if (!container) return;
     let cancelled = false;
     (async () => {
-      const stored = await storageGet(`pos:${currentDocId}`);
-      if (cancelled || !stored) return;
-      let pos;
-      try { pos = JSON.parse(stored); } catch { return; }
+      // Library books store position in Supabase (library_reads.position) so
+      // it syncs across devices. Uploads stay on localStorage by design —
+      // per-device per-doc, never leaves the browser.
+      let pos = null;
+      if (currentDocSource === "library" && user?.id) {
+        const row = await cloudLoadLibraryPosition(user.id, currentDocId);
+        pos = row?.position ?? null;
+      } else {
+        const stored = await storageGet(`pos:${currentDocId}`);
+        if (cancelled || !stored) return;
+        try { pos = JSON.parse(stored); } catch { return; }
+      }
+      if (cancelled || !pos) return;
       const sectionIdx = Number(pos?.sectionIdx) || 0;
       // Section 0 is the default starting position — nothing to restore.
       if (sectionIdx === 0) return;
@@ -620,12 +644,15 @@ export default function App() {
       requestAnimationFrame(settle);
     })();
     return () => { cancelled = true; };
-  }, [docSections, hasSections, currentDocId]);
+  }, [docSections, hasSections, currentDocId, currentDocSource, user]);
 
   // Save reading position on scroll, debounced. Computes sectionIdx +
   // pixel offset within that section from the container's scroll state
-  // (no dependency on currentSectionIdx, which churns every RAF). Writes
-  // to localStorage keyed by docId, so each doc remembers its own place.
+  // (no dependency on currentSectionIdx, which churns every RAF).
+  //
+  // Storage layer is source-aware: uploads write to localStorage (per-device,
+  // never leaves the browser); library books write to Supabase library_reads
+  // so positions sync across devices.
   useEffect(() => {
     if (!docSections || !hasSections || !currentDocId) return;
     const container = readerRef.current;
@@ -644,7 +671,14 @@ export default function App() {
           scrollOffset = -top;
         } else break;
       }
-      storageSet(`pos:${currentDocId}`, JSON.stringify({ sectionIdx, scrollOffset: Math.round(scrollOffset), savedAt: Date.now() }));
+      const position = { sectionIdx, scrollOffset: Math.round(scrollOffset), savedAt: Date.now() };
+      if (currentDocSource === "library" && user?.id) {
+        cloudSaveLibraryPosition(user.id, currentDocId, position).catch(err => {
+          console.warn("[position] library save failed:", err.message);
+        });
+      } else {
+        storageSet(`pos:${currentDocId}`, JSON.stringify(position));
+      }
     };
     const onScroll = () => {
       if (saveTimer) clearTimeout(saveTimer);
@@ -655,7 +689,7 @@ export default function App() {
       container.removeEventListener("scroll", onScroll);
       if (saveTimer) { clearTimeout(saveTimer); savePosition(); }
     };
-  }, [docSections, hasSections, currentDocId]);
+  }, [docSections, hasSections, currentDocId, currentDocSource, user]);
 
   const attemptUpload = useCallback((file) => {
     if (!file) return;
@@ -707,6 +741,8 @@ export default function App() {
         throw new Error("This file doesn't contain any readable text. It might be image-based, encrypted, or empty.");
       }
       setText(fullText); setDocSections(sections); setFileName(file.name);
+      setCurrentDocSource("upload");
+      setReaderOpen(true);
     } catch (e) {
       // Map raw parser exceptions to user-friendly per-format messages.
       // The original exception is still in console for debugging.
@@ -746,20 +782,77 @@ export default function App() {
     setShowPricing(true);
   }, [sub.isPro]);
 
+  // Open a library book by id. Shared by:
+  //   - LibrarySection card clicks (fresh first open, passes the full book)
+  //   - Bookshelf clicks / Recent Docs entries with source='library' (re-opens)
+  //
+  // cloudOpenLibraryBook handles the tier gate server-side. If gated, surface
+  // the PricingModal (free user trying to open a Pro title); otherwise feed
+  // the returned EPUB blob to the existing parseEPUB pipeline.
+  const openLibraryBook = useCallback(async (bookOrId) => {
+    if (!user?.id) { setShowAuth(true); return; }
+    const bookId = typeof bookOrId === "string" ? bookOrId : bookOrId?.id;
+    if (!bookId) return;
+    setLoading(true); setLoadMsg("Fetching from the library…");
+    try {
+      const result = await cloudOpenLibraryBook(user.id, bookId, sub.isPro);
+      if (!result) {
+        showToast("That book isn't available right now.", "error");
+        return;
+      }
+      if (result.gated) {
+        // Free user opened a Pro-only book — point them at the upgrade flow
+        // instead of the parser. Keep the landing visible (no doc state change).
+        setShowPricing(true);
+        return;
+      }
+      const { blob, book } = result;
+      setLoadMsg("Unpacking EPUB…");
+      const sections = await parseEPUB(blob);
+      const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
+      if (!fullText.trim()) {
+        throw new Error("This book doesn't contain readable text.");
+      }
+      setText(fullText);
+      setDocSections(sections);
+      setFileName(book.title);
+      setCurrentDocId(book.id);
+      setCurrentDocSource("library");
+      setReaderOpen(true);
+      // Refresh both lists so the freshly-opened book appears on the
+      // bookshelf without waiting for the next mount.
+      recentDocs.refreshLists();
+    } catch (e) {
+      console.error("[openLibraryBook] failed:", e);
+      showToast(e.message || "Couldn't open that book.", "error", 7000);
+    } finally {
+      setLoading(false); setLoadMsg("");
+    }
+  }, [user, sub.isPro, recentDocs, showToast]);
+
   const loadRecentDoc = useCallback(async (entry) => {
+    // Library entries route through cloudOpenLibraryBook so the EPUB blob
+    // is re-fetched from the shared library bucket and the saved position
+    // is restored. Uploads continue through the per-user documents bucket.
+    if (entry?.source === "library" && entry?.book_id) {
+      return openLibraryBook(entry.book_id);
+    }
     setLoading(true); setLoadMsg("Loading saved document…");
     try {
       const data = await recentDocs.loadDoc(entry);
       if (data) {
         setText(data.text); setDocSections(data.sections); setFileName(data.name);
         setCurrentDocId(entry.id);
+        setCurrentDocSource("upload");
+        setReaderOpen(true);
       } else {
         setText("Document no longer available. Try uploading it again.");
         setDocSections(null); setFileName(entry.name); setCurrentDocId(null);
+        setCurrentDocSource(null);
       }
-    } catch { setText("Error loading saved document."); setDocSections(null); setCurrentDocId(null); }
+    } catch { setText("Error loading saved document."); setDocSections(null); setCurrentDocId(null); setCurrentDocSource(null); }
     finally { setLoading(false); setLoadMsg(""); }
-  }, [recentDocs]);
+  }, [recentDocs, openLibraryBook]);
 
   const onDrop = useCallback((e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer?.files?.[0]) attemptUpload(e.dataTransfer.files[0]); }, [attemptUpload]);
   // Phase 8c — gate the checkout flow on a verified email. Supabase populates
@@ -838,6 +931,7 @@ export default function App() {
       <AvatarSettingsModal open={showAvatarSettings} onOpenChange={setShowAvatarSettings} onSave={saveAvatar} currentAvatar={avatar} isPro={sub.isPro} onShowPricing={() => setShowPricing(true)} t={t} />
       {showSubscription && <SubscriptionModal open={showSubscription} onOpenChange={setShowSubscription} sub={sub} onShowPricing={() => setShowPricing(true)} t={t} />}
       {showDeleteAccount && <DeleteAccountModal open={showDeleteAccount} onOpenChange={setShowDeleteAccount} sub={sub} t={t} />}
+      {showLibraryDrawer && <LibraryDrawer open={showLibraryDrawer} onOpenChange={setShowLibraryDrawer} books={library.books} isPro={sub.isPro} onOpen={openLibraryBook} t={t} />}
     </Suspense>
   );
 
@@ -882,11 +976,15 @@ export default function App() {
   // ═══════════════════════════════════════════
   // LANDING PAGE
   // ═══════════════════════════════════════════
-  // Note: only `!text` gates the landing now (was `!text && !loading`). During
-  // a file upload, the landing stays mounted while the loader overlay covers
-  // it. When parse completes, the landing unmounts and the reader mounts; the
+  // Landing is gated by `!text && !readerOpen` so the reader chrome stays
+  // mounted after the user closes a doc with the sidebar X — the reader's
+  // empty-state prompt takes over instead of bouncing back to the landing.
+  // Only the explicit "TailorMyText" back-button in the reader's top bar
+  // clears readerOpen and returns here. During a file upload, the landing
+  // stays mounted while the loader overlay covers it; when parse completes,
+  // readerOpen flips true, the landing unmounts, and the reader mounts; the
   // overlay then fades out over the freshly-painted reader.
-  if (!text) return (
+  if (!text && !readerOpen) return (
     <>
     <div
       className="tmt-marketing"
@@ -1031,7 +1129,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); setPanelOpen(false); }}
+              onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); setCurrentDocSource("upload"); setReaderOpen(true); setPanelOpen(false); }}
               className="rf-btn-solid tmt-btn ghost"
             >
               <FileText size={13} /> Try demo article
@@ -1140,13 +1238,15 @@ export default function App() {
         </div>
       </div>
 
-      {/* ─── CONTINUE READING — centered horizontal pill strip, sits in its
-          own band above the theme picker so it flows with the centered
-          theme dots instead of throwing the right hero column out of
-          balance. Hidden when the library is empty. */}
+      {/* ─── CONTINUE READING + YOUR BOOKSHELF — two parallel personal
+          surfaces. Continue Reading lists uploads; Your Bookshelf lists
+          library books the user has opened (the borrow-from-library
+          metaphor — books that live on the shelf between reading sessions).
+          Both are authed-only; anonymous visitors see neither. */}
       {user && (
-        <div style={{ position: "relative", zIndex: 2, padding: "0 24px 36px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ position: "relative", zIndex: 2, padding: "0 24px 36px", display: "flex", flexDirection: "column", alignItems: "center", gap: 28 }}>
           <LandingRecentDocs recentList={recentDocs.recentList} onLoad={loadRecentDoc} isPro={sub.isPro} t={t} />
+          <LandingBookshelf bookshelfList={recentDocs.bookshelfList} onOpen={loadRecentDoc} t={t} />
         </div>
       )}
 
@@ -1154,7 +1254,9 @@ export default function App() {
           the radial reveal animation (runThemeTransition uses the View
           Transitions API to wipe-reveal the new theme outward from the
           click point). The dots themselves still call setTheme via
-          runThemeTransition exactly as before. */}
+          runThemeTransition exactly as before. Sits directly under
+          Continue Reading so the typography-controls beat stays adjacent
+          to the user's personal reading surfaces. */}
       <div style={{ position: "relative", zIndex: 2, padding: "0 24px 56px", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
         <span className="tmt-label">Try a theme — the whole app follows</span>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1189,6 +1291,17 @@ export default function App() {
           })}
         </div>
       </div>
+
+      {/* ─── CURATED LIBRARY — Project Gutenberg catalog. Authed-only;
+          anonymous visitors get the marketing tease (added separately so
+          signing in remains a "pleasant surprise"). Free users see the
+          full catalog with Pro titles lock-pilled. Top rule + generous
+          padding mirror the conditions-grid section divider below. */}
+      {user && library.books.length > 0 && (
+        <section style={{ position: "relative", zIndex: 2, padding: "100px 24px 60px", borderTop: `1px solid var(--tmt-rule)`, maxWidth: 1240, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <LibrarySection books={library.books} isPro={sub.isPro} onOpen={openLibraryBook} />
+        </section>
+      )}
 
       {/* ═══════════════ MARKETING — CONDITIONS GRID ═══════════════
           Six editorial cards explaining who the product is for.
@@ -1270,7 +1383,47 @@ export default function App() {
       <div className="rf-no-select" style={{ width: panelOpen ? 296 : 0, minWidth: panelOpen ? 296 : 0, height: "100%", overflowY: "auto", overflowX: "hidden", borderRight: panelOpen ? `1px solid ${t.border}` : "none", background: t.bg, transition: "width 0.3s ease, min-width 0.3s ease" }}>
         {panelOpen && (
           <div style={{ width: 296 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "12px 12px 0px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "12px 12px 0px" }}>
+              {/* Back-to-home — explicit landing-page return, separate from
+                  the Currently-Reading X (which only closes the current doc).
+                  Editorial Fraunces italic on the label keeps it visually
+                  distinct from the sans-serif sidebar chrome and signals it's
+                  a navigation crossing into the marketing/landing surface. */}
+              <Tip label="Back to home" t={t} side="bottom">
+                <button
+                  onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); setCurrentDocId(null); setCurrentDocSource(null); setReaderOpen(false); }}
+                  aria-label="Back to home"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 34,
+                    padding: "0 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "transparent",
+                    color: t.fgSoft,
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontFamily: "'Newsreader', Georgia, serif",
+                    fontStyle: "italic",
+                    lineHeight: 1,
+                    letterSpacing: "0.005em",
+                    boxSizing: "border-box",
+                  }}
+                  onMouseEnter={ev => { ev.currentTarget.style.color = t.fg; ev.currentTarget.style.background = t.surfaceHover; }}
+                  onMouseLeave={ev => { ev.currentTarget.style.color = t.fgSoft; ev.currentTarget.style.background = "transparent"; }}
+                >
+                  <ArrowLeft size={14} strokeWidth={2} />
+                  {/* Italic Newsreader's cap-height sits in the upper ~73% of
+                      the line-box, so flex-centering the line-box leaves the
+                      visible glyphs floating above the icon's visual center.
+                      A 1.5px downward shift on JUST the text re-centers it
+                      against the ArrowLeft (and, by extension, the X in the
+                      close-panel button on the other end of the row). */}
+                  <span style={{ display: "inline-block", transform: "translateY(1.5px)" }}>Back to home</span>
+                </button>
+              </Tip>
               <Tip label="Close panel" t={t} side="bottom">
                 <button onClick={() => setPanelOpen(false)} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><PanelLeftClose size={16} strokeWidth={2} /></button>
               </Tip>
@@ -1281,14 +1434,16 @@ export default function App() {
               {/* DEV ONLY — admin role only */}
             </div>
 
-            <div style={{ padding: "10px 14px", borderBottom: `1px solid ${t.borderSoft}` }}>
-              <p style={{ fontSize: 10.5, fontWeight: 500, color: t.fgSoft, fontFamily: "'IBM Plex Mono', ui-monospace, monospace", letterSpacing: "0.16em", textTransform: "uppercase", margin: "0 0 10px", padding: "0 2px" }}>Currently Reading</p>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, color: t.fgSoft }}>
-                <FileText size={13} style={{ color: t.accent, flexShrink: 0 }} />
-                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'Newsreader', Georgia, serif", fontStyle: "italic", fontSize: 14, color: t.fg }}>{fileName}</span>
-                <button aria-label="Close document" onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); setCurrentDocId(null); }} style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={15} strokeWidth={2} /></button>
+            {text && (
+              <div style={{ padding: "10px 14px", borderBottom: `1px solid ${t.borderSoft}` }}>
+                <p style={{ fontSize: 10.5, fontWeight: 500, color: t.fgSoft, fontFamily: "'IBM Plex Mono', ui-monospace, monospace", letterSpacing: "0.16em", textTransform: "uppercase", margin: "0 0 10px", padding: "0 2px" }}>Currently Reading</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, color: t.fgSoft }}>
+                  <FileText size={13} style={{ color: t.accent, flexShrink: 0 }} />
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "'Newsreader', Georgia, serif", fontStyle: "italic", fontSize: 14, color: t.fg }}>{fileName}</span>
+                  <button aria-label="Close document" title="Close — pick another from your shelf" onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); setCurrentDocId(null); setCurrentDocSource(null); /* keep readerOpen so user lands on the empty-state prompt, not the landing page */ }} style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", color: t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><X size={15} strokeWidth={2} /></button>
+                </div>
               </div>
-            </div>
+            )}
 
             <Section title="Enhancements" icon={Sparkles} t={t} open={false} active={neuroDiv || hueGuide || focusMode}>
               <Toggle on={neuroDiv} onChange={setNeuroDiv} label="NeuroDiv Anchoring" icon={Baseline} t={t} />
@@ -1416,12 +1571,38 @@ export default function App() {
               </div>
             </Section>
 
-            <div style={{ padding: 14 }}>
+            <div style={{ padding: "14px 14px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
               <button onClick={() => sub.canUpload ? fileRef.current?.click() : setShowPaywall(true)} className="rf-btn" style={{ width: "100%", padding: "10px 16px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.fgSoft, cursor: "pointer", fontSize: 13, fontWeight: 560, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxSizing: "border-box" }}><Upload size={14} /> Upload new file</button>
               <input ref={fileRef} type="file" accept={FILE_ACCEPT} style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) attemptUpload(f); }} />
+              {library.books.length > 0 && (
+                <button
+                  onClick={() => setShowLibraryDrawer(true)}
+                  className="rf-btn"
+                  style={{
+                    width: "100%",
+                    padding: "10px 16px",
+                    borderRadius: 10,
+                    border: `1px solid ${t.border}`,
+                    background: "transparent",
+                    color: t.fg,
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontWeight: 560,
+                    fontFamily: "'DM Sans', sans-serif",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <LibraryBig size={14} /> Browse the Library
+                </button>
+              )}
             </div>
 
             <SidebarRecentDocs recentList={recentDocs.recentList} fileName={fileName} onLoad={loadRecentDoc} onRemove={id => recentDocs.removeDoc(id)} isPro={sub.isPro} t={t} />
+            <SidebarBookshelf bookshelfList={recentDocs.bookshelfList} fileName={fileName} onOpen={loadRecentDoc} onRemove={id => recentDocs.removeDoc(id)} t={t} />
           </div>
         )}
       </div>
@@ -1436,9 +1617,9 @@ export default function App() {
             </Tip>
           )}
           <button
-            onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); setCurrentDocId(null); }}
+            onClick={() => { setText(""); setDocSections(null); setFileName(""); setFocusPara(-1); setCurrentDocId(null); setCurrentDocSource(null); setReaderOpen(false); }}
             className="rf-static"
-            title="Back to library"
+            title="Back to home"
             style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer", fontSize: 20, fontWeight: 620, color: t.fg, fontFamily: currentFont?.css ?? "'DM Sans', sans-serif", outline: "none", transition: "font-family 0.2s" }}
           >
             {/* key={fontFamily} forces remount on font change so the gradient
@@ -1507,12 +1688,12 @@ export default function App() {
           )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {/* Reader feature toggles. Tooltips use action-descriptive labels
-               (not product names like "NeuroDiv" / "HueGuide") so first-time
-               users understand what each toggle does without prior context.
+            {/* Reader feature toggles. Tooltips use the short product name
+               only; longer descriptions live in the sidebar Toggle labels +
+               settings, so the reader chrome stays scannable on hover.
                aria-label mirrors the tip for screen readers, which never see
                the tooltip. */}
-            {[{ on: neuroDiv, set: setNeuroDiv, icon: Baseline, tip: "Bold word starts (NeuroDiv)" }, { on: hueGuide, set: setHueGuide, icon: Palette, tip: "Line color tracking (HueGuide)" }, { on: focusMode, set: v => { setFocusMode(v); if (!v) setFocusPara(-1); }, icon: Focus, tip: "Focus current paragraph" }].map(({ on, set, icon: Icon, tip }) => (
+            {[{ on: neuroDiv, set: setNeuroDiv, icon: Baseline, tip: "NeuroDiv" }, { on: hueGuide, set: setHueGuide, icon: Palette, tip: "HueGuide" }, { on: focusMode, set: v => { setFocusMode(v); if (!v) setFocusPara(-1); }, icon: Focus, tip: "Focus" }].map(({ on, set, icon: Icon, tip }) => (
               <Tip key={tip} label={tip} t={t} side="bottom">
                 <button onClick={() => set(!on)} aria-label={tip} aria-pressed={on} className={on ? "rf-btn-icon-active" : ""} style={{ width: 34, height: 34, borderRadius: 8, border: "none", background: on ? t.accent : "transparent", color: on ? "#fff" : t.icon, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon size={16} strokeWidth={2} /></button>
               </Tip>
@@ -1532,14 +1713,25 @@ export default function App() {
             t={t}
             title="Couldn't render this document"
             description="The reader hit an error displaying this file. It may be malformed or use unsupported markup. Try another document, or reset to clear the error."
-            onReset={() => { setText(""); setDocSections(null); setFileName(""); setCurrentDocId(null); }}
+            onReset={() => { setText(""); setDocSections(null); setFileName(""); setCurrentDocId(null); setCurrentDocSource(null); setReaderOpen(false); }}
           >
-            <DocumentBody
-              text={text} docSections={docSections} hasSections={hasSections}
-              wrapperRef={handleDocWrapperRef} featureClassRef={handleFeatureClassRef}
-              settings={settings} focusModeRef={focusModeRef}
-              setFocusPara={setFocusPara} sectionRefs={sectionRefs} titleRefs={titleRefs}
-            />
+            {text ? (
+              <DocumentBody
+                text={text} docSections={docSections} hasSections={hasSections}
+                wrapperRef={handleDocWrapperRef} featureClassRef={handleFeatureClassRef}
+                settings={settings} focusModeRef={focusModeRef}
+                setFocusPara={setFocusPara} sectionRefs={sectionRefs} titleRefs={titleRefs}
+              />
+            ) : (
+              <ReaderEmptyState
+                t={t}
+                hasLibrary={library.books.length > 0}
+                hasBookshelf={recentDocs.bookshelfList.length > 0}
+                onBrowseLibrary={() => setShowLibraryDrawer(true)}
+                onUpload={() => sub.canUpload ? fileRef.current?.click() : setShowPaywall(true)}
+                canUpload={true}
+              />
+            )}
           </ErrorBoundary>
         </div>
       </div>

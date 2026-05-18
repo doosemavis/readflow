@@ -5,7 +5,7 @@
     "Excluded non-English titles (Die Traumdeutung)"
   ],
   "_free_tier_count": 5,
-  "_total": 20,
+  "_total": 21,
   "books": [
     { "rank": 1,  "id": 84,    "title": "Frankenstein; or, The Modern Prometheus", "author": "Mary Wollstonecraft Shelley", "publication_date": "1818", "tier": "free" },
     { "rank": 2,  "id": 2701,  "title": "Moby Dick; or, The Whale",                 "author": "Herman Melville",            "publication_date": "1851", "tier": "free" },
@@ -26,6 +26,7 @@
     { "rank": 17, "id": 76,    "title": "Adventures of Huckleberry Finn",           "author": "Mark Twain",                 "publication_date": "1884", "tier": "pro"  },
     { "rank": 18, "id": 345,   "title": "Dracula",                                  "author": "Bram Stoker",                "publication_date": "1897", "tier": "pro"  },
     { "rank": 19, "id": 1661,  "title": "The Adventures of Sherlock Holmes",        "author": "Arthur Conan Doyle",         "publication_date": "1892", "tier": "pro"  },
-    { "rank": 20, "id": 1259,  "title": "Twenty Years After",                       "author": "Alexandre Dumas",            "publication_date": "1845", "tier": "pro"  }
+    { "rank": 20, "id": 1259,  "title": "Twenty Years After",                       "author": "Alexandre Dumas",            "publication_date": "1845", "tier": "pro"  },
+    { "rank": 21, "id": 174,   "title": "The Picture of Dorian Gray",               "author": "Oscar Wilde",                "publication_date": "1890", "tier": "pro"  }
   ]
 }
