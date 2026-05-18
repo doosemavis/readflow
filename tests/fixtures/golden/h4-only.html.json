@@ -1,0 +1,8 @@
+[
+  {
+    "type": "section",
+    "title": null,
+    "number": 1,
+    "content": "Chapter 1: The Beginning\n\nThis document uses h4 for chapter headings, which is unconventional but valid HTML5 sectioning.\n\nThe current parser only recognizes h1-h3 as section breaks; h4 is silently treated as body text.\n\nChapter 2: The Middle\n\nIf the parser is fixed to handle h1-h6, this becomes a second section.\n\nOtherwise everything flattens into one long stream.\n\nChapter 3: The End\n\nThree chapters total. The eval harness expects 3 sections after Phase 4 fixes."
+  }
+]

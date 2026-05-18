@@ -1,0 +1,8 @@
+[
+  {
+    "type": "section",
+    "title": null,
+    "number": 1,
+    "content": "Chapter 1 buried in divs\n        \n          The heading is real but it's nested four divs deep.\n          The current parser walks body.children (direct children only) and may miss this entirely."
+  }
+]
