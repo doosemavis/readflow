@@ -38,6 +38,11 @@ export async function parseEPUB(file) {
   if (!opfXml) throw new Error("Invalid EPUB: missing OPF");
 
   const opfDoc = new DOMParser().parseFromString(opfXml, "application/xml");
+  // OPF is the spine; without it we cannot enumerate chapters. Hard-fail
+  // so App.jsx surfaces a real error message instead of "no content".
+  if (opfDoc.querySelector("parsererror")) {
+    throw new Error("Invalid EPUB: OPF metadata is malformed");
+  }
   const manifest = {};
   opfDoc.querySelectorAll("item").forEach(item => { manifest[item.getAttribute("id")] = item.getAttribute("href"); });
   const spineRefs = [];
@@ -50,11 +55,17 @@ export async function parseEPUB(file) {
     const ncxXml = await zip.file(ncxHref)?.async("text");
     if (ncxXml) {
       const ncxDoc = new DOMParser().parseFromString(ncxXml, "application/xml");
-      ncxDoc.querySelectorAll("navPoint").forEach(np => {
-        const label = np.querySelector("navLabel text")?.textContent?.trim();
-        const src = np.querySelector("content")?.getAttribute("src")?.split("#")[0];
-        if (label && src) tocTitles[src] = label;
-      });
+      // NCX only supplies human titles. Soft-fail: warn and skip TOC; the
+      // book still reads, chapters fall back to null/h1 titles.
+      if (ncxDoc.querySelector("parsererror")) {
+        console.warn("[parseEPUB] NCX (table of contents) is malformed — chapter titles will be lost");
+      } else {
+        ncxDoc.querySelectorAll("navPoint").forEach(np => {
+          const label = np.querySelector("navLabel text")?.textContent?.trim();
+          const src = np.querySelector("content")?.getAttribute("src")?.split("#")[0];
+          if (label && src) tocTitles[src] = label;
+        });
+      }
     }
   }
 
@@ -64,6 +75,12 @@ export async function parseEPUB(file) {
     const href = manifest[idref]; if (!href) continue;
     const xhtml = await zip.file(opfDir + href)?.async("text"); if (!xhtml) continue;
     const parsed = new DOMParser().parseFromString(xhtml, "application/xhtml+xml");
+    // Soft-fail per chapter: warn and skip this one; remaining chapters
+    // still parse so the user gets a usable subset of the book.
+    if (parsed.querySelector("parsererror")) {
+      console.warn(`[parseEPUB] chapter XHTML is malformed; skipping: ${href}`);
+      continue;
+    }
     const body = parsed.body || parsed.documentElement;
     const headings = body.querySelectorAll("h1, h2, h3");
     let title = tocTitles[href] || null;
