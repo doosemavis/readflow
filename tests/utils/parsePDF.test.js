@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { analyzePDF } from "../../src/workers/pdfAnalysis.js";
+import { analyzePDF, markMinorityFontsAsEmphasis } from "../../src/workers/pdfAnalysis.js";
 
 // parsePDF previously had two bare `catch {}` blocks (outline fetch +
 // per-entry destination resolution). Failures vanished into the void;
@@ -94,6 +94,20 @@ describe("resolveOutlineSafe — bulk + threshold warn behavior (Task 1.6)", () 
     expect(result).toHaveLength(4);
     // The >50% threshold message specifically — separate from the per-entry warns.
     expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/most outline|majority|broken/i));
+  });
+});
+
+describe("markMinorityFontsAsEmphasis — immutability", () => {
+  it("returns new items rather than mutating caller's items", () => {
+    const original = { str: "x", fontName: "MinorityFont", isBold: false, isItalic: false };
+    const rawPageData = [{ lines: [{ items: [original] }] }];
+    const fontUsage = {
+      primary: "PrimaryFont", primaryCount: 100,
+      all: new Map([["PrimaryFont", 100], ["MinorityFont", 10]]),
+    };
+    const result = markMinorityFontsAsEmphasis(rawPageData, fontUsage);
+    expect(original.isBold).toBe(false); // caller's item untouched
+    expect(result[0].lines[0].items[0].isBold).toBe(true); // new item flipped
   });
 });
 
