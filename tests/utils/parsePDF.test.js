@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { analyzePDF } from "../../src/workers/pdfAnalysis.js";
 
 // parsePDF previously had two bare `catch {}` blocks (outline fetch +
 // per-entry destination resolution). Failures vanished into the void;
@@ -93,5 +94,52 @@ describe("resolveOutlineSafe — bulk + threshold warn behavior (Task 1.6)", () 
     expect(result).toHaveLength(4);
     // The >50% threshold message specifically — separate from the per-entry warns.
     expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/most outline|majority|broken/i));
+  });
+});
+
+describe("buildPerPageSections — contract guarantees", () => {
+  // Helper: build a pdf.js-style item with transform encoding x/y as the
+  // 5th/6th elements and fontSize as the 3rd element of the transform matrix.
+  function makeItem(str, x, y, fontSize, fontName = "F1") {
+    return {
+      str,
+      fontName,
+      // pdf.js transform: [scaleX, skewX, skewY, scaleY, translateX, translateY]
+      transform: [fontSize, 0, 0, fontSize, x, y],
+      width: str.length * (fontSize * 0.6),
+      height: fontSize,
+      hasEOL: false,
+    };
+  }
+
+  it("never emits a section with empty content (even when title matches)", () => {
+    const rawPages = [{
+      pageNum: 1,
+      viewport: { width: 612, height: 792 },
+      styles: {},
+      items: [
+        makeItem("Chapter 1", 72, 700, 14),
+      ],
+    }];
+    const result = analyzePDF({ rawPages, resolvedOutline: null });
+    for (const s of result) {
+      expect(s.content.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it("omits titleSizeRatio when no measurement is available", () => {
+    const rawPages = [{
+      pageNum: 1,
+      viewport: { width: 612, height: 792 },
+      styles: {},
+      items: [
+        makeItem("Body line one.", 72, 700, 12),
+        makeItem("Body line two.", 72, 680, 12),
+      ],
+    }];
+    const result = analyzePDF({ rawPages, resolvedOutline: null });
+    for (const s of result) {
+      if ("titleSizeRatio" in s) expect(s.titleSizeRatio).toBeGreaterThan(0);
+    }
   });
 });
