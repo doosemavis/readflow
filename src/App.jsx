@@ -66,7 +66,7 @@ const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, parseInWorker, runThemeTransition, sniffDocumentType } from "./utils";
 import { storageGet, storageSet, storageDel } from "./utils/storage";
 import { supabase } from "./utils/supabase";
-import { track } from "./utils/track";
+import { track, trackParseOutcome } from "./utils/track";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
 import { useLibrary } from "./hooks/useLibrary";
@@ -761,6 +761,22 @@ export default function App() {
       // polyfill — Phase 3 territory if we want it moved).
       else if (ext === "md") { setLoadMsg("Parsing Markdown…"); sections = await parseInWorker("parse-md", await file.text()); }
       else { sections = await parseInWorker("parse-text", await file.text()); }
+      // Normalize the parser result shape (Task C2-3):
+      // - Binary parsers (PDF, EPUB, DOCX) return Section[] directly.
+      // - Text parsers (HTML, MD, TXT) return { sections, depthFallback }.
+      //   parseInWorker passes the worker postMessage payload through unchanged.
+      const parserResult = sections;
+      const normalizedSections = Array.isArray(parserResult) ? parserResult : parserResult.sections;
+      const depthFallback = Array.isArray(parserResult) ? false : Boolean(parserResult.depthFallback);
+      sections = normalizedSections;
+      // Fire-and-forget telemetry — never block the UI render path on a DB insert.
+      void trackParseOutcome({
+        format: ext === "htm" ? "html" : ext,
+        depthFallback,
+        sectionCount: sections.length,
+        docByteSize: file?.size ?? null,
+        ext: file?.name?.split(".").pop()?.toLowerCase() ?? null,
+      });
       const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
       // Empty-content guard: if the parser returned no readable text, the
       // file is most likely image-only (scanned PDF without OCR), encrypted,
@@ -1177,7 +1193,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => { const s = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); setCurrentDocSource("upload"); setReaderOpen(true); setPanelOpen(false); }}
+              onClick={() => { const { sections: s } = detectTextStructure(DEMO_TEXT); setText(DEMO_TEXT); setDocSections(s); setFileName("demo-article.txt"); setCurrentDocSource("upload"); setReaderOpen(true); setPanelOpen(false); }}
               className="rf-btn-solid tmt-btn ghost"
             >
               <FileText size={13} /> Try demo article

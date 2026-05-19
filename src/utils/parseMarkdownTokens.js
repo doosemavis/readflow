@@ -1,4 +1,10 @@
-// CONTRACT: emits Section[] per docs/architecture/PARSER_CONTRACT.md.
+// CONTRACT: emits { sections: Section[], depthFallback: boolean } per
+// docs/architecture/PARSER_CONTRACT.md. depthFallback=true means heading
+// depths exist in the document but none repeat (≥2 times), so the depth
+// pick fell back to "smallest depth at all" — a signal of structural
+// uncertainty for telemetry (Task C2-3). depthFallback=false means either
+// a repeating depth was found (confident pick) or no headings at all
+// (fallback never fired, single-document result).
 // Tested in tests/utils/parseMarkdownTokens.test.js.
 //
 // Phase 3 of the parser rewrite. Replaces the regex-based preprocessor
@@ -44,6 +50,11 @@ import { marked } from "marked";
 //   - h4-only docs → h4 splits
 // Anything ABOVE the chosen depth becomes inline content; anything BELOW
 // stays inline as a ## sub-heading marker.
+// Returns { depth, fallback } where:
+//   depth    — the heading depth to use as the section boundary
+//   fallback — true if depth was chosen by the "smallest depth at all"
+//              fallback (no depth repeats ≥2 times). This signals
+//              structural uncertainty; callers surface it as depthFallback.
 function pickSectionDepth(tokens) {
   const counts = new Map();
   for (const t of tokens) {
@@ -51,12 +62,12 @@ function pickSectionDepth(tokens) {
       counts.set(t.depth, (counts.get(t.depth) || 0) + 1);
     }
   }
-  if (counts.size === 0) return Infinity; // no headings → no splits
+  if (counts.size === 0) return { depth: Infinity, fallback: false }; // no headings → no splits, fallback didn't fire
   // Smallest depth with count >= 2.
   const repeated = [...counts.entries()].filter(([_, c]) => c >= 2).map(([d]) => d);
-  if (repeated.length > 0) return Math.min(...repeated);
+  if (repeated.length > 0) return { depth: Math.min(...repeated), fallback: false };
   // Otherwise smallest depth at all (single-heading-of-its-kind docs).
-  return Math.min(...counts.keys());
+  return { depth: Math.min(...counts.keys()), fallback: true };
 }
 
 function renderInline(tokens) {
@@ -194,7 +205,7 @@ function stripFrontMatter(md) {
 export function parseMarkdownTokens(md) {
   const stripped = stripFrontMatter(md);
   const tokens = marked.lexer(stripped);
-  const sectionDepth = pickSectionDepth(tokens);
+  const { depth: sectionDepth, fallback: depthFallback } = pickSectionDepth(tokens);
 
   const sections = [];
   let sectionNum = 0;
@@ -238,12 +249,20 @@ export function parseMarkdownTokens(md) {
   pushIfNonEmpty();
 
   // No headings → single document section (matches detectTextStructure's
-  // no-structure fallback shape).
+  // no-structure fallback shape). depthFallback is false here (the depth
+  // pick returned Infinity with fallback=false — no headings means the
+  // fallback never fired).
   if (sections.length === 0) {
-    return [{ type: "document", title: null, number: 1, content: stripped.trim() }];
+    return {
+      sections: [{ type: "document", title: null, number: 1, content: stripped.trim() }],
+      depthFallback: false,
+    };
   }
 
   // Renumber after dropping any empty heading-only sections so the
   // `number` field is contiguous.
-  return sections.map((s, i) => ({ ...s, number: i + 1 }));
+  return {
+    sections: sections.map((s, i) => ({ ...s, number: i + 1 })),
+    depthFallback,
+  };
 }

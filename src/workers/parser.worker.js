@@ -1,5 +1,9 @@
-// CONTRACT: posts back Section[] per docs/architecture/PARSER_CONTRACT.md.
-// Phase 3 will swap the MD path to a marked.lexer() token→section adapter.
+// CONTRACT (Task C2-3): posts back { id, sections, depthFallback? } per
+// docs/architecture/PARSER_CONTRACT.md. Text parsers (parse-text, parse-md)
+// now return { sections, depthFallback }; binary parsers (parse-pdf) return
+// Section[]. The worker normalizes both shapes into a consistent postMessage
+// payload so the main-thread wrapper (parserWorker.js) can pass through the
+// full shape without knowing which parser ran.
 //
 // Parser Worker (Phase 2: text + Markdown only).
 //
@@ -29,29 +33,32 @@ self.onmessage = (e) => {
   if (typeof id !== "number") return; // ignore malformed messages
 
   try {
-    let sections;
     switch (type) {
-      case "parse-text":
-        sections = detectTextStructure(payload);
+      case "parse-text": {
+        // detectTextStructure returns { sections, depthFallback } (Task C2-3).
+        const result = detectTextStructure(payload);
+        self.postMessage({ id, sections: result.sections, depthFallback: result.depthFallback });
         break;
-      case "parse-md":
+      }
+      case "parse-md": {
         // Phase 3: flag selects between marked.lexer + adapter (default)
-        // and the legacy regex preprocessor. Both emit the same Section[]
-        // shape so the renderer doesn't care which ran.
-        sections = USE_MARKDOWN_TOKEN_PARSER
+        // and the legacy regex preprocessor. Both now return { sections, depthFallback }.
+        const result = USE_MARKDOWN_TOKEN_PARSER
           ? parseMarkdownTokens(payload)
           : parseMarkdownStructured(payload);
+        self.postMessage({ id, sections: result.sections, depthFallback: result.depthFallback });
         break;
+      }
       case "parse-pdf":
         // payload: { rawPages, resolvedOutline, debug }
         // pdf.js calls (load, getDocument, getTextContent, outline resolution)
         // happen on main thread; this branch runs the heuristics-heavy analysis.
-        sections = analyzePDF(payload);
+        // analyzePDF is a binary parser — returns Section[] with no depthFallback.
+        self.postMessage({ id, sections: analyzePDF(payload) });
         break;
       default:
         throw new Error(`Unknown parser type: ${type}`);
     }
-    self.postMessage({ id, sections });
   } catch (err) {
     // Errors don't structured-clone cleanly across the postMessage boundary
     // (Error.constructor, .stack, and any custom properties get dropped).

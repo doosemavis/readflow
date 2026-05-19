@@ -81,14 +81,14 @@ function assertSectionShape(section) {
 describe("Renderer contract — every parser emits the documented Section[] shape", () => {
   describe("parseMarkdownStructured", () => {
     it("emits valid Section[] for a multi-chapter doc", () => {
-      const sections = parseMarkdownStructured("# Chapter 1\n\nHello.\n\n# Chapter 2\n\nWorld.");
+      const { sections } = parseMarkdownStructured("# Chapter 1\n\nHello.\n\n# Chapter 2\n\nWorld.");
       expect(Array.isArray(sections)).toBe(true);
       expect(sections.length).toBeGreaterThan(0);
       sections.forEach(assertSectionShape);
     });
 
     it("emits a single valid Section for unstructured prose", () => {
-      const sections = parseMarkdownStructured("Just some plain prose with no headings at all.");
+      const { sections } = parseMarkdownStructured("Just some plain prose with no headings at all.");
       expect(Array.isArray(sections)).toBe(true);
       expect(sections.length).toBe(1);
       sections.forEach(assertSectionShape);
@@ -97,14 +97,14 @@ describe("Renderer contract — every parser emits the documented Section[] shap
 
   describe("detectTextStructure", () => {
     it("emits valid Section[] for a doc with CHAPTER headings", () => {
-      const sections = detectTextStructure("CHAPTER 1\n\nFirst body.\n\nCHAPTER 2\n\nSecond body.");
+      const { sections } = detectTextStructure("CHAPTER 1\n\nFirst body.\n\nCHAPTER 2\n\nSecond body.");
       expect(Array.isArray(sections)).toBe(true);
       expect(sections.length).toBeGreaterThan(0);
       sections.forEach(assertSectionShape);
     });
 
     it("emits a single document-typed Section for unstructured prose", () => {
-      const sections = detectTextStructure("Just plain prose. No headings.");
+      const { sections } = detectTextStructure("Just plain prose. No headings.");
       expect(Array.isArray(sections)).toBe(true);
       expect(sections.length).toBe(1);
       expect(sections[0].type).toBe("document");
@@ -115,7 +115,7 @@ describe("Renderer contract — every parser emits the documented Section[] shap
   describe("parseHTMLStructured", () => {
     it("emits valid Section[] for an HTML doc with h1 headings", () => {
       const html = "<html><body><h1>Chapter 1</h1><p>Body one.</p><h1>Chapter 2</h1><p>Body two.</p></body></html>";
-      const sections = parseHTMLStructured(html);
+      const { sections } = parseHTMLStructured(html);
       expect(Array.isArray(sections)).toBe(true);
       expect(sections.length).toBeGreaterThan(0);
       sections.forEach(assertSectionShape);
@@ -123,7 +123,7 @@ describe("Renderer contract — every parser emits the documented Section[] shap
 
     it("falls back to detectTextStructure when no headings are present", () => {
       const html = "<html><body><p>Just a paragraph, no headings.</p></body></html>";
-      const sections = parseHTMLStructured(html);
+      const { sections } = parseHTMLStructured(html);
       expect(Array.isArray(sections)).toBe(true);
       expect(sections.length).toBeGreaterThan(0);
       sections.forEach(assertSectionShape);
@@ -135,14 +135,14 @@ describe("Renderer contract — every parser emits the documented Section[] shap
 // No mocks needed — the adapter is pure JS with no external I/O.
 describe("parseMarkdownTokens — contract", () => {
   it("emits valid sections for a multi-chapter MD doc", () => {
-    const sections = parseMarkdownTokens("# Chapter 1\n\nProse.\n\n# Chapter 2\n\nMore prose.");
+    const { sections } = parseMarkdownTokens("# Chapter 1\n\nProse.\n\n# Chapter 2\n\nMore prose.");
     expect(Array.isArray(sections)).toBe(true);
     expect(sections.length).toBeGreaterThan(0);
     sections.forEach(assertSectionShape);
   });
 
   it("emits a valid single section for a no-headings MD doc", () => {
-    const sections = parseMarkdownTokens("Just prose with no headings at all.");
+    const { sections } = parseMarkdownTokens("Just prose with no headings at all.");
     expect(Array.isArray(sections)).toBe(true);
     expect(sections.length).toBeGreaterThan(0);
     sections.forEach(assertSectionShape);

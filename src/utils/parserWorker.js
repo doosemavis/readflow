@@ -28,7 +28,7 @@ function getWorker() {
   );
 
   workerInstance.onmessage = (e) => {
-    const { id, sections, error } = e.data || {};
+    const { id, sections, depthFallback, error } = e.data || {};
     const entry = pending.get(id);
     if (!entry) return; // late reply for a discarded promise
     pending.delete(id);
@@ -44,7 +44,14 @@ function getWorker() {
         if (error.stack) rehydrated.stack = error.stack;
         entry.reject(rehydrated);
       }
+    } else if (depthFallback !== undefined) {
+      // Text parser result: worker posted { id, sections, depthFallback }.
+      // Resolve with the full { sections, depthFallback } shape so callers
+      // can distinguish text vs binary parser results and access the signal.
+      entry.resolve({ sections, depthFallback });
     } else {
+      // Binary parser result: worker posted { id, sections } (no depthFallback).
+      // Resolve with the Section[] array directly (binary contract unchanged).
       entry.resolve(sections);
     }
   };

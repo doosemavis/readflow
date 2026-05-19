@@ -49,7 +49,12 @@ export async function parseDOCX(file) {
   // script/style/footer stripping, and the type harmonization to
   // "chapter". Keeping one walker means DOCX gets every HTML improvement
   // for free.
-  const sections = parseHTMLStructured(result.value);
+  //
+  // parseHTMLStructured now returns { sections, depthFallback } (Task C2-3).
+  // parseDOCX is a binary parser and must return Section[] per the contract;
+  // we extract sections here and discard depthFallback (binary parser
+  // telemetry is out of scope for Task C2-3).
+  const { sections } = parseHTMLStructured(result.value);
 
   // Treat single-section-with-no-title as "no structure" — that's what
   // happens when mammoth produced a body with no headings at all.
@@ -57,7 +62,8 @@ export async function parseDOCX(file) {
   if (sections.length === 0 || looksUnstructured) {
     console.warn("[parseDOCX] no headings detected — falling back to extractRawText (structure lost)");
     const raw = (await mammoth.extractRawText(mammothInputForBuf(buf))).value;
-    return detectTextStructure(raw);
+    const { sections: fallbackSections } = detectTextStructure(raw);
+    return fallbackSections;
   }
   return sections;
 }

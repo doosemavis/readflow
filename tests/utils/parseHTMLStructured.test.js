@@ -11,7 +11,7 @@ describe("parseHTMLStructured — script/style stripping (Task 4.1)", () => {
       <p>Real paragraph.</p>
       <script>const evilTracker = "PII"; alert(evilTracker);</script>
     </body></html>`;
-    const sections = parseHTMLStructured(html);
+    const { sections } = parseHTMLStructured(html);
     for (const s of sections) {
       expect(s.content).not.toContain("evilTracker");
       expect(s.content).not.toContain("alert(");
@@ -25,7 +25,7 @@ describe("parseHTMLStructured — script/style stripping (Task 4.1)", () => {
       <p>Real paragraph.</p>
       <style>.leaked { color: red; font-family: 'should-not-appear'; }</style>
     </body></html>`;
-    const sections = parseHTMLStructured(html);
+    const { sections } = parseHTMLStructured(html);
     for (const s of sections) {
       expect(s.content).not.toContain("should-not-appear");
       expect(s.content).not.toContain("color: red");
@@ -41,7 +41,7 @@ describe("parseHTMLStructured — script/style stripping (Task 4.1)", () => {
       <object>object-text</object>
       <embed>embed-text</embed>
     </body></html>`;
-    const sections = parseHTMLStructured(html);
+    const { sections } = parseHTMLStructured(html);
     for (const s of sections) {
       expect(s.content).not.toContain("noscript-fallback-text");
       expect(s.content).not.toContain("iframe-text");
@@ -57,7 +57,7 @@ describe("parseHTMLStructured — heading detection (Task 4.2 + 90% push)", () =
       <h1>One</h1><p>x</p>
       <h1>Two</h1><p>y</p>
     </body></html>`;
-    const sections = parseHTMLStructured(html);
+    const { sections } = parseHTMLStructured(html);
     expect(sections).toHaveLength(2);
   });
 
@@ -72,7 +72,7 @@ describe("parseHTMLStructured — heading detection (Task 4.2 + 90% push)", () =
       <h2>Section B</h2>
       <p>body b</p>
     </body></html>`;
-    const sections = parseHTMLStructured(html);
+    const { sections } = parseHTMLStructured(html);
     expect(sections).toHaveLength(2);
     expect(sections.map((s) => s.title)).toEqual(["Section A", "Section B"]);
   });
@@ -83,7 +83,7 @@ describe("parseHTMLStructured — heading detection (Task 4.2 + 90% push)", () =
       <h2>Sub</h2><p>still ch1</p>
       <h1>Ch2</h1><p>body</p>
     </body></html>`;
-    const sections = parseHTMLStructured(html);
+    const { sections } = parseHTMLStructured(html);
     expect(sections).toHaveLength(2);
     expect(sections.map((s) => s.title)).toEqual(["Ch1", "Ch2"]);
     expect(sections[0].content).toContain("## Sub");
@@ -98,7 +98,7 @@ describe("parseHTMLStructured — semantic container recursion (90% push)", () =
         <p>Body.</p>
       </article>
     </body></html>`;
-    const [s] = parseHTMLStructured(html);
+    const { sections: [s] } = parseHTMLStructured(html);
     expect(s.title).toBe("Real Title");
     expect(s.content).toContain("Body");
   });
@@ -108,7 +108,7 @@ describe("parseHTMLStructured — semantic container recursion (90% push)", () =
       <section><h1>A</h1><p>body a</p></section>
       <section><h1>B</h1><p>body b</p></section>
     </body></html>`;
-    const sections = parseHTMLStructured(html);
+    const { sections } = parseHTMLStructured(html);
     expect(sections).toHaveLength(2);
     expect(sections.map((s) => s.title)).toEqual(["A", "B"]);
   });
@@ -119,7 +119,7 @@ describe("parseHTMLStructured — semantic container recursion (90% push)", () =
       <p>Real paragraph.</p>
       <footer>Copyright 1999, do not read.</footer>
     </body></html>`;
-    const [s] = parseHTMLStructured(html);
+    const { sections: [s] } = parseHTMLStructured(html);
     expect(s.content).toContain("Real paragraph");
     expect(s.content).not.toContain("Copyright 1999");
   });
@@ -146,13 +146,13 @@ describe("parseHTMLStructured — type harmonization (Task 4.4)", () => {
       <h1>Title</h1>
       <p>Body paragraph.</p>
     </body></html>`;
-    const [s] = parseHTMLStructured(html);
+    const { sections: [s] } = parseHTMLStructured(html);
     expect(s.type).toBe("chapter");
   });
 
   it("fallback (no-headings) section type is still 'document' (from detectTextStructure)", () => {
     const html = `<html><body><p>Just one paragraph.</p></body></html>`;
-    const sections = parseHTMLStructured(html);
+    const { sections } = parseHTMLStructured(html);
     expect(sections[0].type).toBe("document");
   });
 });
@@ -160,7 +160,7 @@ describe("parseHTMLStructured — type harmonization (Task 4.4)", () => {
 describe("parseHTMLStructured — textContent fallback consistency (Task A5)", () => {
   it("falls back via textContent (not innerText) when no semantic structure", () => {
     const html = `<html><body><p>One paragraph.</p><p>Another paragraph.</p></body></html>`;
-    const sections = parseHTMLStructured(html);
+    const { sections } = parseHTMLStructured(html);
     expect(sections.length).toBeGreaterThan(0);
     for (const s of sections) {
       expect(s.content.trim().length).toBeGreaterThan(0);
@@ -168,5 +168,32 @@ describe("parseHTMLStructured — textContent fallback consistency (Task A5)", (
     const joined = sections.map((s) => s.content).join(" ");
     expect(joined).toContain("One paragraph.");
     expect(joined).toContain("Another paragraph.");
+  });
+});
+
+describe("parseHTMLStructured — depthFallback signal", () => {
+  it("returns depthFallback=false when a repeating heading depth exists", () => {
+    const html = `<html><body>
+      <h1>Chapter One</h1><p>Body one.</p>
+      <h1>Chapter Two</h1><p>Body two.</p>
+    </body></html>`;
+    const result = parseHTMLStructured(html);
+    expect(result).toHaveProperty("sections");
+    expect(result).toHaveProperty("depthFallback");
+    expect(result.depthFallback).toBe(false);
+  });
+
+  it("returns depthFallback=true when only a single unique heading depth exists", () => {
+    const html = `<html><body>
+      <h2>Solo Section</h2><p>Body.</p>
+    </body></html>`;
+    const result = parseHTMLStructured(html);
+    expect(result.depthFallback).toBe(true);
+  });
+
+  it("returns depthFallback=false for no-headings doc (fallback doesn't apply)", () => {
+    const html = `<html><body><p>Just prose, no headings.</p></body></html>`;
+    const result = parseHTMLStructured(html);
+    expect(result.depthFallback).toBe(false);
   });
 });
