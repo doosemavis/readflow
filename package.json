@@ -38,8 +38,11 @@
     "@types/react": "^18.3.3",
     "@vitejs/plugin-react": "^4.3.1",
     "@vitest/ui": "^3.2.4",
+    "docx": "^9.6.1",
     "happy-dom": "^20.9.0",
     "jszip": "^3.10.1",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38",
     "vite": "^5.4.0",
     "vitest": "^3.2.4"
   }

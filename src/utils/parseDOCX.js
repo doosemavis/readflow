@@ -1,5 +1,5 @@
 import mammoth from "mammoth";
-import { detectTextStructure } from "./detectStructure";
+import { detectTextStructure, parseHTMLStructured } from "./detectStructure.js";
 
 // CONTRACT: emits Section[] per docs/architecture/PARSER_CONTRACT.md.
 // Currently emits type:"section" — Phase 4 of the parser-rewrite plan
@@ -15,9 +15,18 @@ import { detectTextStructure } from "./detectStructure";
 // justify the effort right now. Tracked alongside EPUB as a deferred
 // optimization in TAILORMYTEXT_LAUNCH_PLAN.md.
 
+// mammoth's input shape differs by environment: the browser bundle wants
+// `arrayBuffer:`, the Node entry wants `buffer:` (a Node Buffer). Pick the
+// shape based on Buffer availability so parseDOCX works in both contexts
+// (production browser + eval harness in Node).
+function mammothInputForBuf(buf) {
+  if (typeof Buffer !== "undefined") return { buffer: Buffer.from(buf) };
+  return { arrayBuffer: buf };
+}
+
 export async function parseDOCX(file) {
   const buf = await file.arrayBuffer();
-  const result = await mammoth.convertToHtml({ arrayBuffer: buf });
+  const result = await mammoth.convertToHtml(mammothInputForBuf(buf));
 
   // mammoth surfaces problems via result.messages. Warnings are common
   // (unsupported style mapping, unknown smart-tags) and we just log them.
@@ -34,31 +43,20 @@ export async function parseDOCX(file) {
     }
   }
 
-  const doc = new DOMParser().parseFromString(result.value, "text/html");
-  const sections = [];
-  let currentTitle = null;
-  let currentContent = [];
-  let sectionNum = 0;
+  // Delegate the section-detection walk to parseHTMLStructured. mammoth
+  // already converted the DOCX into HTML; the HTML parser owns the
+  // dynamic-depth rule, transparent container recursion, h1-h6 detection,
+  // script/style/footer stripping, and the type harmonization to
+  // "chapter". Keeping one walker means DOCX gets every HTML improvement
+  // for free.
+  const sections = parseHTMLStructured(result.value);
 
-  const flush = () => {
-    const text = currentContent.join("\n\n").trim();
-    if (text) { sectionNum++; sections.push({ type: "section", title: currentTitle, number: sectionNum, content: text }); }
-    currentContent = [];
-  };
-
-  for (const node of doc.body.children) {
-    const tag = node.tagName.toLowerCase();
-    if (/^h[1-3]$/.test(tag)) { flush(); currentTitle = node.textContent.trim(); }
-    else { const txt = node.textContent.trim(); if (txt) currentContent.push(txt); }
-  }
-  flush();
-
-  if (sections.length === 0) {
-    // mammoth produced HTML but it had no headings — we've lost structure.
-    // Surface the fallback in logs so a degraded parse doesn't masquerade
-    // as a clean one.
+  // Treat single-section-with-no-title as "no structure" — that's what
+  // happens when mammoth produced a body with no headings at all.
+  const looksUnstructured = sections.length === 1 && !sections[0].title;
+  if (sections.length === 0 || looksUnstructured) {
     console.warn("[parseDOCX] no headings detected — falling back to extractRawText (structure lost)");
-    const raw = (await mammoth.extractRawText({ arrayBuffer: buf })).value;
+    const raw = (await mammoth.extractRawText(mammothInputForBuf(buf))).value;
     return detectTextStructure(raw);
   }
   return sections;

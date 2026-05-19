@@ -61,7 +61,30 @@ function getWorker() {
   return workerInstance;
 }
 
+// Node fallback for the eval harness. Web Workers don't exist in Node, so
+// we run the worker's analyzer modules synchronously on the main thread.
+// Browsers always use the Worker path above; this branch only fires when
+// `typeof Worker === "undefined"` (server-side / Node test runs).
+async function runInProcess(type, payload) {
+  if (type === "parse-pdf") {
+    const { analyzePDF } = await import("../workers/pdfAnalysis.js");
+    return analyzePDF(payload);
+  }
+  if (type === "parse-md") {
+    const { parseMarkdownTokens } = await import("./parseMarkdownTokens.js");
+    return parseMarkdownTokens(payload);
+  }
+  if (type === "parse-text") {
+    const { detectTextStructure } = await import("./detectStructure.js");
+    return detectTextStructure(payload);
+  }
+  throw new Error(`Unknown parser type: ${type}`);
+}
+
 export function parseInWorker(type, payload) {
+  if (typeof Worker === "undefined") {
+    return runInProcess(type, payload);
+  }
   const id = ++nextId;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });

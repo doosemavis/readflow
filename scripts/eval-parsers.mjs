@@ -20,22 +20,55 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Window } from "happy-dom";
+import JSZip from "jszip";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
-// Polyfill global DOMParser so parseHTMLStructured works in Node.
+// Polyfill global DOMParser so parseHTMLStructured works in Node. happy-dom
+// also gives us a working Window we attach to globalThis.window so the
+// production parsers' `window.JSZip` / `window.pdfjsLib` references resolve.
 const win = new Window();
 globalThis.DOMParser = win.DOMParser;
-globalThis.document = win.document;
+globalThis.window = win;
+// Pre-install the CDN-loaded globals from their npm equivalents. scriptLoader
+// detects the headless env and short-circuits, so the parsers read these
+// directly without trying to attach a <script> tag.
+globalThis.window.JSZip = JSZip;
+
+// Lazy-load pdfjs only when a PDF fixture is seen — its legacy ESM build
+// pulls in ~35MB which we'd rather skip for txt-only runs.
+let pdfjsReady = null;
+async function ensurePdfjs() {
+  if (!pdfjsReady) {
+    pdfjsReady = import("pdfjs-dist/legacy/build/pdf.mjs").then((mod) => {
+      // parsePDF detects `typeof Worker === "undefined"` and passes
+      // disableWorker per call, so we don't set GlobalWorkerOptions here.
+      globalThis.window.pdfjsLib = mod;
+      return mod;
+    });
+  }
+  return pdfjsReady;
+}
 
 // Dynamic import AFTER the polyfill is in place.
 const { detectTextStructure, parseHTMLStructured, parseMarkdownStructured } =
   await import("../src/utils/detectStructure.js");
 const { parseMarkdownTokens } = await import("../src/utils/parseMarkdownTokens.js");
 const { sniffDocumentType } = await import("../src/utils/sniffDocumentType.js");
+const { parseEPUB } = await import("../src/utils/parseEPUB.js");
+const { parseDOCX } = await import("../src/utils/parseDOCX.js");
+const { parsePDF } = await import("../src/utils/parsePDF.js");
 const { USE_MARKDOWN_TOKEN_PARSER } = await import("../src/config/constants.js");
 const mdParser = USE_MARKDOWN_TOKEN_PARSER ? parseMarkdownTokens : parseMarkdownStructured;
+
+// Wrap a Node Buffer as the File-like our parsers expect (they only call
+// .arrayBuffer()). Sliced ArrayBuffer scopes the bytes to this file (Node
+// Buffer.buffer points into a shared pool).
+function bufferToFile(buf) {
+  const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  return { arrayBuffer: () => Promise.resolve(ab) };
+}
 
 const MANIFEST_PATH = join(ROOT, "tests/fixtures/MANIFEST.json");
 const GOLDEN_DIR = join(ROOT, "tests/fixtures/golden");
@@ -44,18 +77,24 @@ const UPDATE = process.argv.includes("--update");
 
 if (!existsSync(GOLDEN_DIR)) mkdirSync(GOLDEN_DIR, { recursive: true });
 
-// Text-format dispatch only. PDF/EPUB/DOCX skipped — see header comment.
+// Dispatch by format. Text dispatchers take a string; binary dispatchers
+// take a File-like (buffer wrapped via bufferToFile).
 const DISPATCH = {
-  txt: (text) => detectTextStructure(text),
-  md: (text) => mdParser(text),
-  html: (text) => parseHTMLStructured(text),
+  txt: { kind: "text", run: (text) => detectTextStructure(text) },
+  md: { kind: "text", run: (text) => mdParser(text) },
+  html: { kind: "text", run: (text) => parseHTMLStructured(text) },
+  epub: { kind: "binary", run: (file) => parseEPUB(file) },
+  docx: { kind: "binary", run: (file) => parseDOCX(file) },
+  pdf: {
+    kind: "binary",
+    run: async (file) => {
+      await ensurePdfjs();
+      return parsePDF(file);
+    },
+  },
 };
 
-const NOEVAL_REASONS = {
-  pdf: "pdf.js loads as a CDN global (window.pdfjsLib); no Node entry yet",
-  epub: "JSZip loads as a CDN global (window.JSZip); uses window.localStorage",
-  docx: "mammoth loads in worker context; requires Blob.arrayBuffer chain",
-};
+const NOEVAL_REASONS = {};
 
 const tally = {
   pass: 0,
@@ -82,7 +121,10 @@ function classify(sections, expectedSections) {
     // legitimately have title=null (no heading to derive from). Only
     // multi-section results need every section titled to count as usable.
     if (detected === 1) return "usable";
-    const allTitled = sections.every((s) => s.title != null && String(s.title).trim() !== "");
+    // type:"page" sections (PDF per-page fallback) legitimately have
+    // title=null — navigation falls back to page numbers in the reader.
+    // Only require titles for chapter/section/document types.
+    const allTitled = sections.every((s) => s.type === "page" || (s.title != null && String(s.title).trim() !== ""));
     return allTitled ? "usable" : "missed_chapter";
   }
   if (detected > expectedSections) return "false_split";
@@ -115,20 +157,24 @@ for (const [fixtureName, meta] of Object.entries(MANIFEST)) {
   }
 
   const goldenPath = join(GOLDEN_DIR, `${fixtureName}.json`);
-  const text = readFileSync(fixturePath, "utf8");
+  const buf = readFileSync(fixturePath);
 
   // Mirror the production sniff step (App.jsx doUpload): a fixture with
   // .txt extension that's actually MD or HTML should be routed to the
   // upgraded parser. Without this, the eval would never see the sniffer's
   // routing wins.
-  const buf = readFileSync(fixturePath);
   const sniffArrayBuf = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
   const sniffed = await sniffDocumentType(fixtureName, sniffArrayBuf);
   const effective = sniffed && DISPATCH[sniffed] && sniffed !== format ? sniffed : format;
 
   let sections;
   try {
-    sections = DISPATCH[effective](text);
+    const handler = DISPATCH[effective];
+    if (handler.kind === "text") {
+      sections = handler.run(buf.toString("utf8"));
+    } else {
+      sections = await handler.run(bufferToFile(buf));
+    }
   } catch (err) {
     if (expectedSections === "throws") {
       console.log(`THROWS-EXPECTED ${fixtureName} — ${err.message}`);

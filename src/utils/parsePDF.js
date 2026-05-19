@@ -25,8 +25,8 @@
 // { type, title, number, content }. Callers (App.jsx, demos) don't see the
 // worker split.
 
-import { loadScript } from "./scriptLoader";
-import { parseInWorker } from "./parserWorker";
+import { loadScript } from "./scriptLoader.js";
+import { parseInWorker } from "./parserWorker.js";
 
 // Walk the pdf.js outline tree into a flat list. Each item: { title, dest, depth }.
 // dest is a pdf.js destination (either a string name or a [page-ref, fit, ...]
@@ -98,10 +98,18 @@ export async function parsePDF(file) {
   await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
   const pdfjsLib = window["pdfjs-dist/build/pdf"] || window.pdfjsLib;
   if (!pdfjsLib) throw new Error("PDF library failed to load");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-  const buf = await file.arrayBuffer();
-  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  // Browser path uses the CDN worker for off-main-thread parsing. In Node
+  // (eval harness), pdfjs auto-detects the missing Worker and runs
+  // synchronously; we just leave GlobalWorkerOptions alone there.
+  // Detect Node explicitly — checking `typeof Worker` isn't enough because
+  // happy-dom defines a Worker stub on its Window.
+  const isNode = typeof process !== "undefined" && process.versions?.node;
+  if (!isNode) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+  const docOpts = { data: new Uint8Array(await file.arrayBuffer()) };
+  const doc = await pdfjsLib.getDocument(docOpts).promise;
 
   // Pre-fetch raw text content per page. Each pdf.js call awaits its internal
   // worker, so the main thread cooperatively yields between pages — RAF

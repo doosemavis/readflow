@@ -1,4 +1,4 @@
-import { loadScript } from "./scriptLoader";
+import { loadScript } from "./scriptLoader.js";
 
 // CONTRACT: emits Section[] per docs/architecture/PARSER_CONTRACT.md.
 // Sections have type:"chapter", title from NCX/h1-h3 (null if neither),

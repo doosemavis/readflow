@@ -297,7 +297,13 @@ function lineTextWithBold(line) {
 }
 
 function lineFontHeight(line) {
-  return median(line.items.map(i => i.height || 0));
+  // Filter out zero-height items. pdf-lib (and many real-world PDF
+  // exporters) emit empty zero-height "spacer" runs between paragraphs;
+  // letting them into the median deflates the line height and makes
+  // body text look like a heading by comparison.
+  const heights = line.items.map((i) => i.height || 0).filter((h) => h > 0);
+  if (heights.length === 0) return 0;
+  return median(heights);
 }
 
 // X-coord of the leftmost text item on a line. Used for indent-based
@@ -717,5 +723,26 @@ export function analyzePDF({ rawPages, resolvedOutline, debug }) {
     if (outlineSections) return outlineSections;
   }
 
-  return buildPerPageSections(pageData, fontTiers);
+  const sections = buildPerPageSections(pageData, fontTiers);
+  if (sections.length > 0) return sections;
+
+  // Contract guarantee: never return an empty Section[] (PARSER_CONTRACT.md
+  // §1 invariant #1). When every page got stripped to nothing — usually
+  // because the PDF only has page-chrome text or the body fell below
+  // detection thresholds — synthesize a single "document" section so the
+  // reader still has something to show and the upload doesn't silently
+  // disappear.
+  const fallback = pageData
+    .flatMap((pd) => pd.lines.map((line) => lineText(line)))
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  return [
+    {
+      type: "document",
+      title: null,
+      number: 1,
+      content: fallback || "(no readable text)",
+    },
+  ];
 }
