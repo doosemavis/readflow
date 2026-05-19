@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { stripLeadingTitle } from "../../src/utils/parseEPUB.js";
 import { Window } from "happy-dom";
 
 // parseEPUB has three DOMParser sites that previously didn't check for
@@ -146,5 +147,26 @@ describe("parseEPUB — DOMParser parsererror detection", () => {
     expect(sections).toHaveLength(2);
     expect(sections[0].title).toBe("Chapter One");
     expect(sections[1].title).toBe("Chapter Two");
+  });
+});
+
+describe("stripLeadingTitle", () => {
+  it("strips an exact-match title", () => {
+    expect(stripLeadingTitle("Chapter 1\n\nProse here.", "Chapter 1")).toBe("Prose here.");
+  });
+  it("strips a case-mismatched title (NCX vs rendered HTML)", () => {
+    expect(stripLeadingTitle("CHAPTER 1\n\nProse here.", "Chapter 1")).toBe("Prose here.");
+  });
+  it("does not strip a coincidental prefix mid-content", () => {
+    expect(stripLeadingTitle("Some prose. Chapter 1.", "Chapter 1")).toBe("Some prose. Chapter 1.");
+  });
+  it("returns content unchanged when title is falsy", () => {
+    expect(stripLeadingTitle("Hello.", "")).toBe("Hello.");
+    expect(stripLeadingTitle("Hello.", null)).toBe("Hello.");
+    expect(stripLeadingTitle("Hello.", undefined)).toBe("Hello.");
+  });
+  it("escapes regex metacharacters in the title", () => {
+    // Title containing regex special chars must be matched literally
+    expect(stripLeadingTitle("Section (a). Body.", "Section (a).")).toBe("Body.");
   });
 });
