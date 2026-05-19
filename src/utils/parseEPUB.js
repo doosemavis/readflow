@@ -20,6 +20,16 @@ import { loadScript } from "./scriptLoader.js";
 // main-thread until measured stutter on real EPUBs justifies the parse5
 // rewrite. Tracked as a deferred TODO in TAILORMYTEXT_LAUNCH_PLAN.md.
 
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function stripLeadingTitle(content, title) {
+  if (!title) return content;
+  const re = new RegExp("^" + escapeRegExp(title.trim()) + "\\s*", "i");
+  return content.replace(re, "").trim();
+}
+
 export async function parseEPUB(file) {
   await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
   const JSZip = window.JSZip;
@@ -99,8 +109,7 @@ export async function parseEPUB(file) {
     if (!rawText) continue;
 
     chapterNum++;
-    let content = rawText;
-    if (title && content.startsWith(title)) content = content.slice(title.length).trim();
+    const content = stripLeadingTitle(rawText, title);
     sections.push({ type: "chapter", title: title || null, number: chapterNum, content });
   }
   if (sections.length === 0) throw new Error("No readable content found in EPUB");

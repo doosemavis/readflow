@@ -156,3 +156,17 @@ describe("parseHTMLStructured — type harmonization (Task 4.4)", () => {
     expect(sections[0].type).toBe("document");
   });
 });
+
+describe("parseHTMLStructured — textContent fallback consistency (Task A5)", () => {
+  it("falls back via textContent (not innerText) when no semantic structure", () => {
+    const html = `<html><body><p>One paragraph.</p><p>Another paragraph.</p></body></html>`;
+    const sections = parseHTMLStructured(html);
+    expect(sections.length).toBeGreaterThan(0);
+    for (const s of sections) {
+      expect(s.content.trim().length).toBeGreaterThan(0);
+    }
+    const joined = sections.map((s) => s.content).join(" ");
+    expect(joined).toContain("One paragraph.");
+    expect(joined).toContain("Another paragraph.");
+  });
+});

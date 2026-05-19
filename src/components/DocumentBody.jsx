@@ -1,4 +1,4 @@
-import { memo, useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback, useRef, useEffect } from "react";
 import { PALETTES } from "../config/constants";
 
 // CONTRACT: consumes Section[] per docs/architecture/PARSER_CONTRACT.md.
@@ -198,8 +198,20 @@ const Paragraph = memo(function Paragraph({ para, idx, huePalette, neuroDivInten
   );
 });
 
-const Section = memo(function Section({ section, si, settings, onParaMouseEnter, refCallback, titleRefCallback }) {
-  const { t, huePalette, neuroDivIntensity } = settings;
+const Section = memo(function Section({ section, si, settings, onParaMouseEnter, sectionRefs, titleRefs }) {
+  const nodeRef = useRef(null);
+  const titleNodeRef = useRef(null);
+
+  useEffect(() => {
+    if (sectionRefs) sectionRefs.current[si] = nodeRef.current;
+    if (titleRefs) titleRefs.current[si] = titleNodeRef.current;
+    return () => {
+      if (sectionRefs) sectionRefs.current[si] = null;
+      if (titleRefs) titleRefs.current[si] = null;
+    };
+  }, [si, sectionRefs, titleRefs]);
+
+  const { fg, fgSoft, border, huePalette, neuroDivIntensity } = settings;
   const isPage = section.type === "page";
   const typeLabel = isPage ? `Page ${section.number}` : null;
   // Prefer the original document's measured ratio so a 2.25× h1 stays
@@ -238,24 +250,24 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
   const paras = useMemo(() => effectiveContent.split(/\n\s*\n/).filter(p => p.trim()), [effectiveContent]);
 
   return (
-    <div ref={refCallback} className="rf-section">
+    <div ref={nodeRef} className="rf-section">
       {si > 0 && (typeLabel ? (
         <div style={DIVIDER_BAR_STYLE}>
-          <div style={{ ...DIVIDER_LINE_BASE, background: t.border }} />
-          <span style={{ ...TYPE_LABEL_STYLE, color: t.fgSoft }}>{typeLabel}</span>
-          <div style={{ ...DIVIDER_LINE_BASE, background: t.border }} />
+          <div style={{ ...DIVIDER_LINE_BASE, background: border }} />
+          <span style={{ ...TYPE_LABEL_STYLE, color: fgSoft }}>{typeLabel}</span>
+          <div style={{ ...DIVIDER_LINE_BASE, background: border }} />
         </div>
       ) : (
-        <div style={{ ...DIVIDER_PLAIN_STYLE, background: t.border }} />
+        <div style={{ ...DIVIDER_PLAIN_STYLE, background: border }} />
       ))}
-      <div ref={titleRefCallback} style={TITLE_WRAP_STYLE}>
+      <div ref={titleNodeRef} style={TITLE_WRAP_STYLE}>
         {/* Title fade-in is handled by a CSS animation on the wrapper
             (.rf-chapter-reveal in global.css) — plain text, no per-frame
             RAF gradient computation, much cheaper than the prior sweep. */}
         <h2 style={{
           fontSize: `calc(var(--rf-font-size, 18px) * ${titleScale})`,
           fontWeight: isPage ? 740 : 760,
-          color: t.fg,
+          color: fg,
           margin: 0,
           lineHeight: isPage ? 1.3 : 1.25,
           fontFamily: "var(--rf-font-family, 'Literata', serif)",
@@ -277,27 +289,13 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
 });
 
 const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections, wrapperRef, featureClassRef, settings, focusModeRef, setFocusPara, sectionRefs, titleRefs }) {
-  const { huePalette, neuroDivIntensity, t } = settings;
+  const { huePalette, neuroDivIntensity, fg } = settings;
 
   const onParaMouseEnter = useCallback((idx) => {
     if (focusModeRef.current) setFocusPara(idx);
   }, [focusModeRef, setFocusPara]);
 
   const paragraphs = useMemo(() => text.split(/\n\s*\n/).filter(p => p.trim()), [text]);
-
-  const sectionRefCallbacks = useMemo(() => {
-    if (!docSections) return [];
-    return docSections.map((_, si) => (el) => {
-      if (sectionRefs) sectionRefs.current[si] = el;
-    });
-  }, [docSections, sectionRefs]);
-
-  const titleRefCallbacks = useMemo(() => {
-    if (!docSections) return [];
-    return docSections.map((_, si) => (el) => {
-      if (titleRefs) titleRefs.current[si] = el;
-    });
-  }, [docSections, titleRefs]);
 
   const wrapperStyle = useMemo(() => ({
     width: "var(--rf-column-width, 95%)",
@@ -308,10 +306,10 @@ const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections
     lineHeight: "var(--rf-line-height, 1.8)",
     letterSpacing: "var(--rf-letter-spacing, 0px)",
     wordSpacing: "var(--rf-word-spacing, 0px)",
-    color: t.fg,
+    color: fg,
     transition: "width 0.3s ease",
     boxSizing: "border-box",
-  }), [t.fg]);
+  }), [fg]);
 
   return (
     <div ref={wrapperRef} className="rf-doc-wrapper" style={wrapperStyle}>
@@ -324,8 +322,8 @@ const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections
               si={si}
               settings={settings}
               onParaMouseEnter={onParaMouseEnter}
-              refCallback={sectionRefCallbacks[si]}
-              titleRefCallback={titleRefCallbacks[si]}
+              sectionRefs={sectionRefs}
+              titleRefs={titleRefs}
             />
           ))
         ) : (

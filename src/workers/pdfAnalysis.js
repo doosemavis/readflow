@@ -114,21 +114,24 @@ function analyzeFontUsage(rawPageData) {
   return { primary: sorted[0]?.[0] || null, primaryCount: sorted[0]?.[1] || 0, all: fontChars };
 }
 
-function markMinorityFontsAsEmphasis(rawPageData, fontUsage) {
+export function markMinorityFontsAsEmphasis(rawPageData, fontUsage) {
   const { primary, primaryCount, all } = fontUsage;
-  if (!primary || primaryCount === 0) return;
+  if (!primary || primaryCount === 0) return rawPageData;
   const MINORITY_RATIO = 0.5; // a font used <50% as much as primary = emphasis variant
-  for (const pd of rawPageData) {
-    for (const line of pd.lines) {
-      for (const it of line.items) {
+  return rawPageData.map((pd) => ({
+    ...pd,
+    lines: pd.lines.map((line) => ({
+      ...line,
+      items: line.items.map((it) => {
         // Already classified by regex/skew — don't overwrite italic with bold.
-        if (it.isBold || it.isItalic) continue;
-        if (!it.fontName || it.fontName === primary) continue;
+        if (it.isBold || it.isItalic) return it;
+        if (!it.fontName || it.fontName === primary) return it;
         const usage = all.get(it.fontName) || 0;
-        if (usage / primaryCount < MINORITY_RATIO) it.isBold = true;
-      }
-    }
-  }
+        if (usage / primaryCount < MINORITY_RATIO) return { ...it, isBold: true };
+        return it;
+      }),
+    })),
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -627,7 +630,11 @@ function buildPerPageSections(pageData, fontTiers) {
 
     const baselineX = pageBaselineX(pd.lines);
     const content = joinHyphenated(buildPageContent(pd.lines, bodyStartIdx, pd.medianGap, fontTiers, baselineX));
-    if (content || title) sections.push({ type: "page", title, titleSizeRatio, number: pd.pageNum, content });
+    if (!content.trim()) continue;
+    sections.push({
+      type: "page", title, number: pd.pageNum, content,
+      ...(titleSizeRatio != null && { titleSizeRatio }),
+    });
   }
   return sections;
 }
@@ -656,7 +663,7 @@ function buildPerPageSections(pageData, fontTiers) {
 
 export function analyzePDF({ rawPages, resolvedOutline, debug }) {
   // ── Pre-scan all pages (with bold info + multi-column awareness) ──
-  const rawPageData = [];
+  let rawPageData = [];
   for (const raw of rawPages) {
     const items = enrichItems(raw.items, raw.styles);
 
@@ -676,7 +683,7 @@ export function analyzePDF({ rawPages, resolvedOutline, debug }) {
   // Runs before chrome-stripping so the analysis sees every item the
   // PDF emitted (including footers we'll discard for content).
   const fontUsage = analyzeFontUsage(rawPageData);
-  markMinorityFontsAsEmphasis(rawPageData, fontUsage);
+  rawPageData = markMinorityFontsAsEmphasis(rawPageData, fontUsage);
 
   // ── Strip running headers/footers + page numbers ──
   const repeatingSet = detectRepeatingLines(rawPageData);

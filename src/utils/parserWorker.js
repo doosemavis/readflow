@@ -10,10 +10,10 @@
 //     CSPs do). The wrapper rethrows synchronously from parseInWorker so the
 //     caller's catch block sees a normal Error before the parse promise is
 //     awaited.
-//   - Worker termination (e.g., the browser kills the worker after long
-//     inactivity) leaves pending promises hanging. We don't currently detect
-//     this; if it becomes a real problem, add an `onerror` handler that
-//     rejects all pending entries with a "worker died" error.
+//   - Worker termination via runtime crash (worker module syntax error,
+//     CSP block, OOM kill) is handled by the `onerror` handler below: all
+//     pending promises reject with the error message and `workerInstance`
+//     is cleared so the next call creates a fresh worker.
 
 let workerInstance = null;
 let nextId = 0;
@@ -56,6 +56,7 @@ function getWorker() {
     const msg = e?.message || "Parser worker crashed";
     for (const entry of pending.values()) entry.reject(new Error(msg));
     pending.clear();
+    workerInstance = null;
   };
 
   return workerInstance;

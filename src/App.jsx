@@ -322,7 +322,7 @@ export default function App() {
 
   // ── Derived ──
   const t = useMemo(() => ({ ...THEMES[theme], key: theme }), [theme]);
-  const currentFont = FONTS.find(f => f.name === fontFamily);
+  const currentFont = useMemo(() => FONTS.find(f => f.name === fontFamily), [fontFamily]);
   const hasSections = docSections && docSections.length > 0 && (docSections.length > 1 || docSections[0]?.title);
 
   // Sync favicon + browser-chrome theme-color to the active theme. SVG is
@@ -449,11 +449,10 @@ export default function App() {
 
   // ── Render settings: only props that genuinely change paragraph/section JSX (palette colors, bold split, theme). ──
   //     NeuroDiv/HueGuide/Focus are NOT here — they flip via featureClassRef and never trigger Section re-renders.
-  const settings = useMemo(() => ({
-    neuroDivIntensity,
-    huePalette,
-    t,
-  }), [neuroDivIntensity, huePalette, t]);
+  const settings = useMemo(
+    () => ({ neuroDivIntensity, huePalette, fg: t.fg, fgSoft: t.fgSoft, border: t.border }),
+    [neuroDivIntensity, huePalette, t.fg, t.fgSoft, t.border],
+  );
 
   // ── Handlers ──
   // Chapter jump pipeline (matches restore for visual consistency):

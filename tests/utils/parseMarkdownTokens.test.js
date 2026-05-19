@@ -207,6 +207,29 @@ describe("parseMarkdownTokens — edge cases", () => {
     expect(sections[0].title).toBe("Real");
   });
 
+  it("strips front matter even when document has no headings", () => {
+    const md = `---\ntitle: My Doc\nauthor: Me\n---\n\nJust some prose. No headings.`;
+    const sections = parseMarkdownTokens(md);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].content).not.toContain("title:");
+    expect(sections[0].content).not.toContain("---");
+    expect(sections[0].content.trim()).toBe("Just some prose. No headings.");
+  });
+
+  it("no-headings fallback uses stripped MD, not raw input (BOM + front matter not leaked)", () => {
+    // This exercises the sections.length === 0 fallback path (line 242).
+    // After stripping, the body is only hrs+spaces — all render to "" — so
+    // sections stays empty and the fallback fires. The raw `md` contains
+    // front matter; stripped does not. The fallback must use stripped.
+    const bom = "﻿";
+    const md = bom + "---\ntitle: My Doc\nauthor: Me\n---\n\n---\n\n---";
+    const sections = parseMarkdownTokens(md);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].content).not.toContain("title:");
+    expect(sections[0].content).not.toContain("author:");
+    expect(sections[0].content).not.toContain("﻿");
+  });
+
   it("returns Section[] satisfying the renderer contract", () => {
     const ALLOWED = ["chapter", "page", "section", "document"];
     const sections = parseMarkdownTokens("# A\n\ntext\n\n# B\n\nmore");
