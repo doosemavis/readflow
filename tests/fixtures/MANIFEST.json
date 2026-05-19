@@ -210,6 +210,12 @@
     "purpose": "10 short chapters — stresses numbering and section accumulation",
     "expectedSections": 10
   },
+  "multi-chapter-per-file.epub": {
+    "format": "epub",
+    "purpose": "Project Gutenberg pattern: 2 spine files, 3 NCX navPoints — chunk-a.xhtml has two chapters at #ch1 (Etymology) and #ch2 (Chapter 1. Loomings); chunk-b.xhtml has one chapter at #ch3. Parser must split by fragment anchor, not by spine file.",
+    "expectedSections": 3,
+    "expectedTitles": ["Etymology", "Chapter 1. Loomings", "Chapter 2. The Carpet-Bag"]
+  },
   "pg-pride-and-prejudice.epub": {
     "format": "epub",
     "purpose": "Happy-path EPUB2 with NCX TOC (from PG library: pg1342)",

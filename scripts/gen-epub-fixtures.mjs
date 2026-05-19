@@ -134,3 +134,83 @@ await buildEpub(
     body: `Body text of section ${i + 1}. Short, intentionally.`,
   })),
 );
+
+// Fixture 6: multi-chapter-per-file — two logical chapters packed into one
+// XHTML file via id-anchored headings (the Project Gutenberg pattern).
+// NCX has 3 navPoints; spine has only 2 itemrefs.
+// chunk-a.xhtml holds "Etymology" + "Chapter 1. Loomings" (two fragments).
+// chunk-b.xhtml holds "Chapter 2. The Carpet-Bag" (one fragment).
+// Expected result: parseEPUB should produce 3 sections, not 2.
+async function genMultiChapterPerFile() {
+  const zip = new JSZip();
+  zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
+  zip.file("META-INF/container.xml", container());
+
+  const opfXml = `<?xml version="1.0"?>
+<package version="2.0" xmlns="http://www.idpf.org/2007/opf">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Multi-Chapter Per File Test Fixture</dc:title>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="chunk-a" href="chunk-a.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chunk-b" href="chunk-b.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="chunk-a"/>
+    <itemref idref="chunk-b"/>
+  </spine>
+</package>`;
+
+  const ncxXml = `<?xml version="1.0"?>
+<ncx version="2005-1" xmlns="http://www.daisy.org/z3986/2005/ncx/">
+  <head></head>
+  <docTitle><text>Multi-Chapter Per File Test Fixture</text></docTitle>
+  <navMap>
+    <navPoint id="np1" playOrder="1">
+      <navLabel><text>Etymology</text></navLabel>
+      <content src="chunk-a.xhtml#ch1"/>
+    </navPoint>
+    <navPoint id="np2" playOrder="2">
+      <navLabel><text>Chapter 1. Loomings</text></navLabel>
+      <content src="chunk-a.xhtml#ch2"/>
+    </navPoint>
+    <navPoint id="np3" playOrder="3">
+      <navLabel><text>Chapter 2. The Carpet-Bag</text></navLabel>
+      <content src="chunk-b.xhtml#ch3"/>
+    </navPoint>
+  </navMap>
+</ncx>`;
+
+  const chunkA = `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Chunk A</title></head>
+<body>
+<h2 id="ch1">Etymology</h2>
+<p>The word whale is derived from the Old English hwael, a creature vast and ancient beyond measure.</p>
+<h2 id="ch2">Chapter 1. Loomings</h2>
+<p>Call me Ishmael. Some years ago, never mind how long precisely, I thought I would sail about and see the watery part of the world.</p>
+</body>
+</html>`;
+
+  const chunkB = `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Chunk B</title></head>
+<body>
+<h2 id="ch3">Chapter 2. The Carpet-Bag</h2>
+<p>I stuffed a shirt or two into my old carpet-bag, tucked it under my arm, and started for Cape Horn and the Pacific.</p>
+</body>
+</html>`;
+
+  zip.file("OEBPS/content.opf", opfXml);
+  zip.file("OEBPS/toc.ncx", ncxXml);
+  zip.file("OEBPS/chunk-a.xhtml", chunkA);
+  zip.file("OEBPS/chunk-b.xhtml", chunkB);
+
+  const buf = await zip.generateAsync({ type: "nodebuffer" });
+  writeFileSync(join(OUT, "multi-chapter-per-file.epub"), buf);
+  console.log(`wrote multi-chapter-per-file.epub (${buf.length} bytes)`);
+}
+
+await genMultiChapterPerFile();

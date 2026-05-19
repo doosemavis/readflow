@@ -150,6 +150,66 @@ describe("parseEPUB — DOMParser parsererror detection", () => {
   });
 });
 
+describe("parseEPUB — multi-chapter-per-file (NCX fragment anchors)", () => {
+  let parseEPUB;
+
+  beforeEach(async () => {
+    const mod = await import("../../src/utils/parseEPUB.js");
+    parseEPUB = mod.parseEPUB;
+  });
+
+  it("splits a single XHTML file into multiple sections when NCX has multiple navPoints targeting different fragment anchors", async () => {
+    installJSZip({
+      "META-INF/container.xml": `<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles>
+</container>`,
+      "OEBPS/content.opf": `<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="chunk-a" href="chunk-a.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chunk-b" href="chunk-b.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="chunk-a"/>
+    <itemref idref="chunk-b"/>
+  </spine>
+</package>`,
+      "OEBPS/toc.ncx": `<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">
+  <navMap>
+    <navPoint><navLabel><text>Etymology</text></navLabel><content src="chunk-a.xhtml#ch1"/></navPoint>
+    <navPoint><navLabel><text>Chapter 1. Loomings</text></navLabel><content src="chunk-a.xhtml#ch2"/></navPoint>
+    <navPoint><navLabel><text>Chapter 2. The Carpet-Bag</text></navLabel><content src="chunk-b.xhtml#ch3"/></navPoint>
+  </navMap>
+</ncx>`,
+      "OEBPS/chunk-a.xhtml": `<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<h2 id="ch1">Etymology</h2><p>Etymology prose.</p>
+<h2 id="ch2">Chapter 1. Loomings</h2><p>Loomings prose.</p>
+</body></html>`,
+      "OEBPS/chunk-b.xhtml": `<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<h2 id="ch3">Chapter 2. The Carpet-Bag</h2><p>Carpet-bag prose.</p>
+</body></html>`,
+    });
+
+    const fakeFile = { arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) };
+    const sections = await parseEPUB(fakeFile);
+
+    expect(sections).toHaveLength(3);
+    expect(sections[0].title).toBe("Etymology");
+    expect(sections[0].content).toContain("Etymology prose");
+    expect(sections[0].content).not.toContain("Loomings"); // splits at fragment
+    expect(sections[1].title).toBe("Chapter 1. Loomings");
+    expect(sections[1].content).toContain("Loomings prose");
+    expect(sections[1].content).not.toContain("Etymology prose"); // doesn't bleed back
+    expect(sections[2].title).toBe("Chapter 2. The Carpet-Bag");
+    expect(sections[2].content).toContain("Carpet-bag prose");
+  });
+});
+
 describe("stripLeadingTitle", () => {
   it("strips an exact-match title", () => {
     expect(stripLeadingTitle("Chapter 1\n\nProse here.", "Chapter 1")).toBe("Prose here.");
