@@ -192,7 +192,8 @@ function stripFrontMatter(md) {
 }
 
 export function parseMarkdownTokens(md) {
-  const tokens = marked.lexer(stripFrontMatter(md));
+  const stripped = stripFrontMatter(md);
+  const tokens = marked.lexer(stripped);
   const sectionDepth = pickSectionDepth(tokens);
 
   const sections = [];
@@ -239,7 +240,7 @@ export function parseMarkdownTokens(md) {
   // No headings → single document section (matches detectTextStructure's
   // no-structure fallback shape).
   if (sections.length === 0) {
-    return [{ type: "document", title: null, number: 1, content: md.trim() }];
+    return [{ type: "document", title: null, number: 1, content: stripped.trim() }];
   }
 
   // Renumber after dropping any empty heading-only sections so the
