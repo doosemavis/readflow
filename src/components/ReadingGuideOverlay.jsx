@@ -96,7 +96,6 @@ export function useReadingGuide({ guideMode, guideColor, guideDimOpacity = 0.25,
   const tFgRef = useRef(t.fg);
   tFgRef.current = t.fg;
   const guideRef = useRef(null);
-  const guideRef2 = useRef(null);
   const guideYRef = useRef(0);       // content-relative y (highlight/underline)
   const clientYRef = useRef(0);      // viewport-relative y (dim)
   const readerLeftRef = useRef(0);   // reader's left edge in viewport (dim bounds)
