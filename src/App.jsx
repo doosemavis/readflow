@@ -63,8 +63,8 @@ const SUPPORTED_EXTS = new Set(FILE_ACCEPT.split(",").map(s => s.replace(/^\./, 
 // in two visual columns. Add new themes to the appropriate array — order within each is the row order.
 const LIGHT_THEME_KEYS = ["warm", "cool", "sepia", "forest", "crimson"];
 const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
-import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, parseInWorker, runThemeTransition } from "./utils";
-import { storageGet, storageSet } from "./utils/storage";
+import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, parseInWorker, runThemeTransition, sniffDocumentType } from "./utils";
+import { storageGet, storageSet, storageDel } from "./utils/storage";
 import { supabase } from "./utils/supabase";
 import { track } from "./utils/track";
 import { useSubscription } from "./hooks/useSubscription";
@@ -577,12 +577,27 @@ export default function App() {
       // per-device per-doc, never leaves the browser.
       let pos = null;
       if (currentDocSource === "library" && user?.id) {
-        const row = await cloudLoadLibraryPosition(user.id, currentDocId);
-        pos = row?.position ?? null;
+        try {
+          const row = await cloudLoadLibraryPosition(user.id, currentDocId);
+          pos = row?.position ?? null;
+        } catch (err) {
+          // Server reachable but returned an error (RLS, network). Fall
+          // back to top-of-book and surface the error in the console;
+          // we don't toast here to avoid blocking the reader.
+          console.warn("[App] cloudLoadLibraryPosition failed; starting from top:", err.message);
+          return;
+        }
       } else {
         const stored = await storageGet(`pos:${currentDocId}`);
         if (cancelled || !stored) return;
-        try { pos = JSON.parse(stored); } catch { return; }
+        try {
+          pos = JSON.parse(stored);
+        } catch (err) {
+          // Corrupt scroll-position key would loop on every open. Log + clear.
+          console.warn(`[App] corrupt scroll position for doc ${currentDocId}; clearing:`, err.message);
+          storageDel(`pos:${currentDocId}`);
+          return;
+        }
       }
       if (cancelled || !pos) return;
       const sectionIdx = Number(pos?.sectionIdx) || 0;
@@ -710,17 +725,32 @@ export default function App() {
     doUpload(file);
   }, [user, sub.canUpload, sub.isLockedOut, sub.maxFileSize, sub.isPro, showToast]);
 
+  // doUpload is the parser dispatcher. Each branch must produce Section[]
+  // per docs/architecture/PARSER_CONTRACT.md (see §4 for the dispatch
+  // protocol — fullText is joined from sections for the empty-content
+  // guard, then setDocSections feeds the renderer).
   const doUpload = useCallback(async (file) => {
     setLoading(true); setLoadMsg("Reading file…");
     let sections;
-    const ext = file.name.split(".").pop().toLowerCase();
+    const rawExt = file.name.split(".").pop().toLowerCase();
+    let ext = rawExt;
     try {
       // Guard: reject anything outside the supported allowlist. Without this,
       // an image (.jpg/.png) or audio file falls through to the plain-text
       // branch and `.text()` decodes its binary bytes as UTF-8 garbage —
       // user sees a screen of gibberish instead of a clear error.
-      if (!SUPPORTED_EXTS.has(ext)) {
-        throw new Error(`TailorMyText doesn't support .${ext} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, JSON).`);
+      if (!SUPPORTED_EXTS.has(rawExt)) {
+        throw new Error(`TailorMyText doesn't support .${rawExt} files. Try a PDF, EPUB, DOCX, or text file (TXT, MD, JSON).`);
+      }
+      // Phase 2 sniff: route by content when the extension is wrong (a
+      // .txt that's actually HTML, a renamed binary, etc.). Sniffer is
+      // pure inspection of the file head; it never overrides a known
+      // binary extension. Falls back to the user's extension on null.
+      const sniffBuf = await file.arrayBuffer();
+      const sniffed = await sniffDocumentType(file.name, sniffBuf);
+      if (sniffed && sniffed !== rawExt) {
+        console.warn(`[doUpload] sniffer routed .${rawExt} → .${sniffed} based on content`);
+        ext = sniffed;
       }
       if (ext === "pdf") { setLoadMsg("Loading PDF engine…"); sections = await parsePDF(file); }
       else if (ext === "epub") { setLoadMsg("Unpacking EPUB…"); sections = await parseEPUB(file); }
@@ -806,7 +836,10 @@ export default function App() {
         setShowPricing(true);
         return;
       }
-      const { blob, book } = result;
+      const { blob, book, mirrorError } = result;
+      if (mirrorError) {
+        showToast("Your bookshelf may not refresh until you reload.", "warning", 5000);
+      }
       setLoadMsg("Unpacking EPUB…");
       const sections = await parseEPUB(blob);
       const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
@@ -840,17 +873,33 @@ export default function App() {
     setLoading(true); setLoadMsg("Loading saved document…");
     try {
       const data = await recentDocs.loadDoc(entry);
-      if (data) {
+      if (data && !data.error) {
         setText(data.text); setDocSections(data.sections); setFileName(data.name);
         setCurrentDocId(entry.id);
         setCurrentDocSource("upload");
         setReaderOpen(true);
+      } else if (data?.error === "corrupted") {
+        setText("This document file is damaged and can't be opened. Please re-upload the original.");
+        setDocSections(null); setFileName(data.name || entry.name); setCurrentDocId(null);
+        setCurrentDocSource(null);
       } else {
         setText("Document no longer available. Try uploading it again.");
         setDocSections(null); setFileName(entry.name); setCurrentDocId(null);
         setCurrentDocSource(null);
       }
-    } catch { setText("Error loading saved document."); setDocSections(null); setCurrentDocId(null); setCurrentDocSource(null); }
+    } catch (err) {
+      console.warn("[App] loadRecentDoc threw:", err);
+      // Network failures from fetch/Supabase typically surface as TypeError
+      // with "fetch failed" / "NetworkError" / "Failed to fetch". Anything
+      // else falls through to the generic message.
+      const msg = String(err?.message || "");
+      if (/fetch|network/i.test(msg)) {
+        setText("Couldn't reach the server to load this document. Check your connection and try again.");
+      } else {
+        setText("Error loading saved document.");
+      }
+      setDocSections(null); setCurrentDocId(null); setCurrentDocSource(null);
+    }
     finally { setLoading(false); setLoadMsg(""); }
   }, [recentDocs, openLibraryBook]);
 

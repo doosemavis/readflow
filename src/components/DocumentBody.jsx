@@ -1,6 +1,12 @@
 import { memo, useMemo, useCallback } from "react";
 import { PALETTES } from "../config/constants";
 
+// CONTRACT: consumes Section[] per docs/architecture/PARSER_CONTRACT.md.
+// Renders the private pseudo-Markdown content language documented in §2
+// of that file (`**bold**`, `__italic__`, `- list`, `1. list`, inline
+// `##`/`###` sub-headings, `{r:RATIO}` per-line size markers). The
+// title/number/titleSizeRatio fallback chains are documented in §5.
+
 // Split a line into segments by markdown-style **bold** and __italic__
 // markers. State-machine pass — each marker toggles its flag and emits
 // a new segment with the current flag state, so nested markers

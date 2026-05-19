@@ -1,3 +1,9 @@
+// CONTRACT: emits Section[] per docs/architecture/PARSER_CONTRACT.md.
+// Sections have type:"chapter" (outline-derived) or "page" (per-page),
+// title from PDF outline entry / first font-tiered heading (null if neither),
+// number from outline index or page number, content in the private
+// pseudo-Markdown format. Sets titleSizeRatio when measurable.
+//
 // Main-thread PDF orchestrator. Thin shell around pdf.js + the parser worker.
 //
 // Why split: the original ~720-line parsePDF lived entirely on the main
@@ -19,8 +25,8 @@
 // { type, title, number, content }. Callers (App.jsx, demos) don't see the
 // worker split.
 
-import { loadScript } from "./scriptLoader";
-import { parseInWorker } from "./parserWorker";
+import { loadScript } from "./scriptLoader.js";
+import { parseInWorker } from "./parserWorker.js";
 
 // Walk the pdf.js outline tree into a flat list. Each item: { title, dest, depth }.
 // dest is a pdf.js destination (either a string name or a [page-ref, fit, ...]
@@ -38,7 +44,10 @@ function flattenOutline(items, depth = 0, out = []) {
 // Resolve a pdf.js destination to a 1-indexed page number. Returns null when
 // the destination can't be resolved (broken outline entry, dead link, etc.) —
 // the worker filters those out.
-async function resolveDestToPage(doc, dest) {
+//
+// Logs at warn level instead of swallowing. The aggregate warn (when many
+// entries fail) is emitted by resolveOutlineSafe, not here.
+export async function resolveDestToPage(doc, dest) {
   try {
     let resolved = dest;
     if (typeof resolved === "string") resolved = await doc.getDestination(resolved);
@@ -46,18 +55,61 @@ async function resolveDestToPage(doc, dest) {
       const pageIdx = await doc.getPageIndex(resolved[0]);
       return pageIdx + 1;
     }
-  } catch {}
+  } catch (err) {
+    console.warn("[parsePDF] outline destination resolution failed:", err.message);
+  }
   return null;
+}
+
+// Fetch + flatten + resolve the outline. Returns null on hard failure
+// (getOutline throws or returns nothing) so the caller falls back to the
+// per-page section path. When the outline is mostly broken (>50% of
+// entries can't be resolved to a page), emit a louder warn so we know
+// the outline is unreliable — useful telemetry as the parser rewrite
+// progresses.
+export async function resolveOutlineSafe(doc) {
+  let outline;
+  try {
+    outline = await doc.getOutline();
+  } catch (err) {
+    console.warn("[parsePDF] outline fetch failed:", err.message);
+    return null;
+  }
+  if (!outline || outline.length === 0) return null;
+
+  const flat = flattenOutline(outline);
+  const entries = await Promise.all(
+    flat.map(async (entry) => ({
+      title: entry.title,
+      depth: entry.depth,
+      page: await resolveDestToPage(doc, entry.dest),
+    })),
+  );
+  const dropped = entries.filter((e) => e.page === null).length;
+  if (entries.length >= 2 && dropped / entries.length > 0.5) {
+    console.warn(
+      `[parsePDF] outline is mostly broken: ${dropped}/${entries.length} entries could not be resolved`,
+    );
+  }
+  return entries;
 }
 
 export async function parsePDF(file) {
   await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
   const pdfjsLib = window["pdfjs-dist/build/pdf"] || window.pdfjsLib;
   if (!pdfjsLib) throw new Error("PDF library failed to load");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-  const buf = await file.arrayBuffer();
-  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  // Browser path uses the CDN worker for off-main-thread parsing. In Node
+  // (eval harness), pdfjs auto-detects the missing Worker and runs
+  // synchronously; we just leave GlobalWorkerOptions alone there.
+  // Detect Node explicitly — checking `typeof Worker` isn't enough because
+  // happy-dom defines a Worker stub on its Window.
+  const isNode = typeof process !== "undefined" && process.versions?.node;
+  if (!isNode) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+  const docOpts = { data: new Uint8Array(await file.arrayBuffer()) };
+  const doc = await pdfjsLib.getDocument(docOpts).promise;
 
   // Pre-fetch raw text content per page. Each pdf.js call awaits its internal
   // worker, so the main thread cooperatively yields between pages — RAF
@@ -79,20 +131,7 @@ export async function parsePDF(file) {
   // Resolve outline destinations on the main thread (workers can't call
   // doc.getDestination / doc.getPageIndex). The worker gets a flat list of
   // { title, page, depth } and doesn't need pdf.js at all.
-  let resolvedOutline = null;
-  try {
-    const outline = await doc.getOutline();
-    if (outline && outline.length > 0) {
-      const flat = flattenOutline(outline);
-      resolvedOutline = await Promise.all(
-        flat.map(async (entry) => ({
-          title: entry.title,
-          depth: entry.depth,
-          page: await resolveDestToPage(doc, entry.dest),
-        })),
-      );
-    }
-  } catch {}
+  const resolvedOutline = await resolveOutlineSafe(doc);
 
   // Diagnostics flag — the worker has no localStorage, so we read here and
   // pass the resolved boolean across.

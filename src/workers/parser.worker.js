@@ -1,3 +1,6 @@
+// CONTRACT: posts back Section[] per docs/architecture/PARSER_CONTRACT.md.
+// Phase 3 will swap the MD path to a marked.lexer() token→section adapter.
+//
 // Parser Worker (Phase 2: text + Markdown only).
 //
 // Runs the worker-safe parsers off the main thread so document parsing
@@ -17,7 +20,9 @@
 // explicit import keeps the dependency clear at the file boundary.
 
 import { detectTextStructure, parseMarkdownStructured } from "../utils/detectStructure";
+import { parseMarkdownTokens } from "../utils/parseMarkdownTokens";
 import { analyzePDF } from "./pdfAnalysis";
+import { USE_MARKDOWN_TOKEN_PARSER } from "../config/constants";
 
 self.onmessage = (e) => {
   const { id, type, payload } = e.data || {};
@@ -30,7 +35,12 @@ self.onmessage = (e) => {
         sections = detectTextStructure(payload);
         break;
       case "parse-md":
-        sections = parseMarkdownStructured(payload);
+        // Phase 3: flag selects between marked.lexer + adapter (default)
+        // and the legacy regex preprocessor. Both emit the same Section[]
+        // shape so the renderer doesn't care which ran.
+        sections = USE_MARKDOWN_TOKEN_PARSER
+          ? parseMarkdownTokens(payload)
+          : parseMarkdownStructured(payload);
         break;
       case "parse-pdf":
         // payload: { rawPages, resolvedOutline, debug }
@@ -44,9 +54,16 @@ self.onmessage = (e) => {
     self.postMessage({ id, sections });
   } catch (err) {
     // Errors don't structured-clone cleanly across the postMessage boundary
-    // (the Error object's stack and constructor get lost). Convert to a
-    // plain string on the worker side; the main thread re-throws as a
-    // standard Error so caller catch blocks see a normal exception.
-    self.postMessage({ id, error: String(err?.message || err) });
+    // (Error.constructor, .stack, and any custom properties get dropped).
+    // Previously we serialized to a plain string, which lost the error
+    // name and stack — the main thread re-threw as a generic Error with
+    // no provenance, making parser bugs hard to trace.
+    //
+    // Now serialize { message, name, stack }; parserWorker.js rebuilds an
+    // Error with the original name + stack preserved.
+    const errorPayload = err instanceof Error
+      ? { message: err.message, name: err.name, stack: err.stack }
+      : { message: String(err), name: "Error", stack: undefined };
+    self.postMessage({ id, error: errorPayload });
   }
 };

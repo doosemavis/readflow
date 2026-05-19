@@ -88,8 +88,13 @@ export async function cloudSaveDoc(userId, name, sections, fullText) {
     .eq("name", name);
   const priorIds = (existing ?? []).filter(r => r.source !== "library").map(r => r.id);
   if (priorIds.length) {
-    await supabase.storage.from(BUCKET).remove(priorIds.map(pid => docPath(userId, pid)));
-    await supabase.from("recent_docs").delete().eq("user_id", userId).in("id", priorIds);
+    // Task 1.13 — capture cleanup errors. A blob-remove or row-delete failure
+    // doesn't block the new upload, but going silent here leaves orphan blobs
+    // / duplicate rows that nobody notices until a storage audit.
+    const { error: rmErr } = await supabase.storage.from(BUCKET).remove(priorIds.map(pid => docPath(userId, pid)));
+    if (rmErr) console.warn("[cloudDocs] prior-doc blob remove failed:", rmErr.message);
+    const { error: delErr } = await supabase.from("recent_docs").delete().eq("user_id", userId).in("id", priorIds);
+    if (delErr) console.warn("[cloudDocs] prior-doc row delete failed:", delErr.message);
   }
 
   // Upload the JSON blob.
@@ -121,9 +126,14 @@ export async function cloudSaveDoc(userId, name, sections, fullText) {
     .order("timestamp", { ascending: false });
   const overflow = (uploadRows ?? []).slice(MAX_RECENT_DOCS);
   if (overflow.length) {
+    // Task 1.14 — same as above for the overflow trim. A storage error here
+    // means we'll see a "Recent Documents over the cap" state for a refresh
+    // or two; better to know than to wonder.
     const overflowIds = overflow.map(r => r.id);
-    await supabase.storage.from(BUCKET).remove(overflowIds.map(oid => docPath(userId, oid)));
-    await supabase.from("recent_docs").delete().eq("user_id", userId).in("id", overflowIds);
+    const { error: rmErr } = await supabase.storage.from(BUCKET).remove(overflowIds.map(oid => docPath(userId, oid)));
+    if (rmErr) console.warn("[cloudDocs] overflow blob remove failed:", rmErr.message);
+    const { error: delErr } = await supabase.from("recent_docs").delete().eq("user_id", userId).in("id", overflowIds);
+    if (delErr) console.warn("[cloudDocs] overflow row delete failed:", delErr.message);
   }
 
   return { id, name, timestamp: entry.timestamp, chunks: 1 };
@@ -154,13 +164,28 @@ export async function cloudLoadDoc(userId, entry) {
     .then(({ error: upErr }) => {
       if (upErr) console.warn("[cloudDocs] failed to refresh last_accessed_at:", upErr.message);
     });
+  // Two distinguishable failure modes:
+  //   - null            → blob is missing on the server (handled above)
+  //   - { error: ... }  → blob downloaded but its contents are unusable
+  // App.jsx can show different user copy for each ("re-upload" vs "damaged").
+  let text;
   try {
-    const text = await blob.text();
-    const d = JSON.parse(text);
-    return { sections: d.sections, text: d.text, name: entry.name };
-  } catch {
-    return null;
+    text = await blob.text();
+  } catch (err) {
+    console.warn("[cloudDocs] blob.text() failed:", err.message);
+    return { error: "corrupted", name: entry.name };
   }
+  let d;
+  try {
+    d = JSON.parse(text);
+  } catch (err) {
+    console.warn("[cloudDocs] document JSON parse failed:", err.message);
+    return { error: "corrupted", name: entry.name };
+  }
+  if (!d || typeof d !== "object") {
+    return { error: "corrupted", name: entry.name };
+  }
+  return { sections: d.sections, text: d.text, name: entry.name };
 }
 
 // Remove a recent-docs entry. Source-aware:
@@ -272,7 +297,11 @@ export async function cloudOpenLibraryBook(userId, bookId, userIsPro) {
       if (error) console.warn("[cloudDocs] failed to upsert library_reads:", error.message);
     });
 
-  return { blob, book };
+  // Task 1.12 — surface the recent_docs mirror failure so App.jsx can show
+  // a non-blocking toast ("Your bookshelf might not refresh until you reload").
+  // The book itself opens fine; only the Recent Documents / Bookshelf
+  // sidebar mirror is stale.
+  return rdErr ? { blob, book, mirrorError: true } : { blob, book };
 }
 
 // Persist reading position for a library book. Mirrors how upload
@@ -300,7 +329,12 @@ export async function cloudLoadLibraryPosition(userId, bookId) {
     .eq("user_id", userId)
     .eq("book_id", bookId)
     .maybeSingle();
-  if (error || !data) return null;
+  // Task 1.11 — distinguish "no saved position" (null data) from "couldn't
+  // talk to the server" (error). Throwing lets App.jsx fall back to scroll
+  // position 0 with an explicit catch rather than silently starting from
+  // the top as if the user had never opened the book.
+  if (error) throw new Error(`Failed to load library position: ${error.message}`);
+  if (!data) return null;
   return data;
 }
 
