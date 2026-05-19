@@ -90,6 +90,42 @@ async function getUserId() {
   }
 }
 
+// Phase 5 telemetry — one row per successful client-side parse into
+// public.parse_outcomes. Drives confidence-score threshold tuning by
+// recording how often the dynamic-depth chooser hits its fallback path
+// (no repeating heading depth ⇒ "smallest depth at all"). After ~1 week of
+// production data, the Phase 5 score thresholds get derived from this
+// distribution rather than from synthetic fixtures alone.
+//
+// Privacy: no file contents stored. Only structural signal.
+// Failure-tolerant: errors are logged and swallowed.
+
+const ALLOWED_FORMATS = new Set(["txt", "md", "html", "pdf", "epub", "docx"]);
+
+export async function trackParseOutcome({ format, depthFallback, sectionCount, docByteSize, ext }) {
+  if (!ALLOWED_FORMATS.has(format)) {
+    console.warn(`[trackParseOutcome] dropping unknown format '${format}'`, { format });
+    return;
+  }
+  try {
+    const row = {
+      session_id:     getSessionId(),
+      user_id:        await getUserId(),
+      format,
+      depth_fallback: Boolean(depthFallback),
+      section_count:  Number.isInteger(sectionCount) ? sectionCount : 0,
+      doc_byte_size:  Number.isInteger(docByteSize) ? docByteSize : null,
+      ext:            ext ? String(ext).slice(0, 16) : null,
+    };
+    const { error } = await supabase.from("parse_outcomes").insert(row);
+    if (error) {
+      console.warn(`[trackParseOutcome] insert failed:`, error.message);
+    }
+  } catch (err) {
+    console.warn(`[trackParseOutcome] threw:`, err?.message ?? err);
+  }
+}
+
 export async function track(name, _extra = {}) {
   if (!ALLOWED_EVENTS.has(name)) {
     console.warn(`[track] dropping unknown event '${name}'`);
