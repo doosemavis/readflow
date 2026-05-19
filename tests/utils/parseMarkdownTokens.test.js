@@ -4,14 +4,14 @@ import { parseMarkdownTokens } from "../../src/utils/parseMarkdownTokens.js";
 // Token→Section adapter contract — see docs/architecture/PARSER_CONTRACT.md.
 //
 // marked.lexer() produces a token stream; this adapter walks it into
-// Section[] using the private pseudo-Markdown content body language the
-// renderer understands. The mapping below is locked by these tests so a
+// { sections, depthFallback } where sections follows Section[] per the
+// renderer contract. The mapping below is locked by these tests so a
 // future marked version bump (or a misguided refactor) can't silently
 // drift the content shape.
 
 describe("parseMarkdownTokens — section boundaries", () => {
   it("emits a single 'document' section for prose with no headings", () => {
-    const sections = parseMarkdownTokens("Just one paragraph of prose. No headings at all.");
+    const { sections } = parseMarkdownTokens("Just one paragraph of prose. No headings at all.");
     expect(sections).toHaveLength(1);
     expect(sections[0].type).toBe("document");
     expect(sections[0].title).toBeNull();
@@ -20,7 +20,7 @@ describe("parseMarkdownTokens — section boundaries", () => {
 
   it("starts a new section at every h1", () => {
     const md = "# One\n\nBody one.\n\n# Two\n\nBody two.";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(2);
     expect(sections[0]).toMatchObject({ type: "chapter", title: "One", number: 1 });
     expect(sections[1]).toMatchObject({ type: "chapter", title: "Two", number: 2 });
@@ -33,7 +33,7 @@ describe("parseMarkdownTokens — section boundaries", () => {
     // metadata, and pre-chapter body becomes a leading "document" section
     // so the intro is preserved.
     const md = "# Document Title\n\nIntro.\n\n## Chapter A\n\nbody\n\n## Chapter B\n\nbody";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(3);
     expect(sections[0].type).toBe("document");
     expect(sections[0].content).toContain("Intro.");
@@ -44,14 +44,14 @@ describe("parseMarkdownTokens — section boundaries", () => {
     // semantic-sections.html shape: h1 doc title + repeated chapter headings.
     // No intro means the leading "document" section is empty and skipped.
     const md = "# Document Title\n\n## Chapter A\n\nbody\n\n## Chapter B\n\nbody";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(2);
     expect(sections.map((s) => s.title)).toEqual(["Chapter A", "Chapter B"]);
   });
 
   it("when h1 repeats, h2 stays inline (clean-doc.md fixture)", () => {
     const md = "# Ch1\n\nbody\n\n## Sub\n\nstill ch1\n\n# Ch2\n\nbody";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(2);
     expect(sections.map((s) => s.title)).toEqual(["Ch1", "Ch2"]);
     expect(sections[0].content).toContain("## Sub");
@@ -59,14 +59,14 @@ describe("parseMarkdownTokens — section boundaries", () => {
 
   it("h3+ does NOT start a section; it becomes an inline ## / ### heading", () => {
     const md = "# Chapter\n\n### Inline heading\n\nBody.";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(1);
     expect(sections[0].content).toContain("### Inline heading");
   });
 
   it("content before the first heading lands in a leading 'document' section", () => {
     const md = "Intro paragraph before any heading.\n\n# First Heading\n\nBody.";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(2);
     expect(sections[0].type).toBe("document");
     expect(sections[0].content).toContain("Intro paragraph");
@@ -76,32 +76,32 @@ describe("parseMarkdownTokens — section boundaries", () => {
 
 describe("parseMarkdownTokens — inline emphasis mapping", () => {
   it("**bold** stays **bold** (renderer's private marker)", () => {
-    const [s] = parseMarkdownTokens("Some **bold word** here.");
+    const { sections: [s] } = parseMarkdownTokens("Some **bold word** here.");
     expect(s.content).toContain("**bold word**");
   });
 
   it("*italic* and _italic_ both become __italic__", () => {
-    const a = parseMarkdownTokens("Some *italicised* word.")[0];
-    expect(a.content).toContain("__italicised__");
-    const b = parseMarkdownTokens("Some _underscored_ word.")[0];
-    expect(b.content).toContain("__underscored__");
+    const { sections: sectA } = parseMarkdownTokens("Some *italicised* word.");
+    expect(sectA[0].content).toContain("__italicised__");
+    const { sections: sectB } = parseMarkdownTokens("Some _underscored_ word.");
+    expect(sectB[0].content).toContain("__underscored__");
   });
 
   it("[link text](url) keeps the label and drops the URL", () => {
-    const [s] = parseMarkdownTokens("Click [the link](https://example.com) please.");
+    const { sections: [s] } = parseMarkdownTokens("Click [the link](https://example.com) please.");
     expect(s.content).toContain("the link");
     expect(s.content).not.toContain("example.com");
     expect(s.content).not.toContain("(https");
   });
 
   it("inline `code` drops the backticks (no monospace style in renderer)", () => {
-    const [s] = parseMarkdownTokens("Use the `useState` hook.");
+    const { sections: [s] } = parseMarkdownTokens("Use the `useState` hook.");
     expect(s.content).toContain("useState");
     expect(s.content).not.toContain("`useState`");
   });
 
   it("![image](src) is dropped entirely", () => {
-    const [s] = parseMarkdownTokens("Look at this ![cool pic](/img.png) image.");
+    const { sections: [s] } = parseMarkdownTokens("Look at this ![cool pic](/img.png) image.");
     expect(s.content).not.toContain("cool pic");
     expect(s.content).not.toContain("/img.png");
   });
@@ -110,21 +110,21 @@ describe("parseMarkdownTokens — inline emphasis mapping", () => {
 describe("parseMarkdownTokens — block elements", () => {
   it("- bullet lists render as one '- item' line per entry", () => {
     const md = "- alpha\n- beta\n- gamma";
-    const [s] = parseMarkdownTokens(md);
+    const { sections: [s] } = parseMarkdownTokens(md);
     expect(s.content).toContain("- alpha");
     expect(s.content).toContain("- beta");
     expect(s.content).toContain("- gamma");
   });
 
   it("numbered lists render as '1. item' with the original start number", () => {
-    const [s] = parseMarkdownTokens("3. third\n4. fourth");
+    const { sections: [s] } = parseMarkdownTokens("3. third\n4. fourth");
     expect(s.content).toContain("3. third");
     expect(s.content).toContain("4. fourth");
   });
 
   it("fenced code blocks render as plain text without backticks or lang tag", () => {
     const md = "```js\nconst x = 1;\nconst y = 2;\n```";
-    const [s] = parseMarkdownTokens(md);
+    const { sections: [s] } = parseMarkdownTokens(md);
     expect(s.content).toContain("const x = 1");
     expect(s.content).toContain("const y = 2");
     expect(s.content).not.toContain("```");
@@ -132,14 +132,14 @@ describe("parseMarkdownTokens — block elements", () => {
   });
 
   it("blockquote lines render as plain paragraphs (no '> ' prefix)", () => {
-    const [s] = parseMarkdownTokens("> A pithy thought.\n> Continued thought.");
+    const { sections: [s] } = parseMarkdownTokens("> A pithy thought.\n> Continued thought.");
     expect(s.content).toContain("A pithy thought");
     expect(s.content).toContain("Continued thought");
     expect(s.content).not.toContain("> ");
   });
 
   it("HTML comments are dropped", () => {
-    const [s] = parseMarkdownTokens("Some prose.\n\n<!-- editor's note -->\n\nMore prose.");
+    const { sections: [s] } = parseMarkdownTokens("Some prose.\n\n<!-- editor's note -->\n\nMore prose.");
     expect(s.content).toContain("Some prose");
     expect(s.content).toContain("More prose");
     expect(s.content).not.toContain("editor");
@@ -148,35 +148,57 @@ describe("parseMarkdownTokens — block elements", () => {
 
   it("horizontal rules (---, ***) are dropped", () => {
     const md = "Paragraph one.\n\n---\n\nParagraph two.";
-    const [s] = parseMarkdownTokens(md);
+    const { sections: [s] } = parseMarkdownTokens(md);
     expect(s.content).toContain("Paragraph one");
     expect(s.content).toContain("Paragraph two");
     expect(s.content).not.toMatch(/^---$/m);
   });
 
   it("strikethrough ~~text~~ is rendered as plain text (we don't have a strike style)", () => {
-    const [s] = parseMarkdownTokens("This is ~~struck out~~ text.");
+    const { sections: [s] } = parseMarkdownTokens("This is ~~struck out~~ text.");
     expect(s.content).toContain("struck out");
     expect(s.content).not.toContain("~~");
+  });
+});
+
+describe("parseMarkdownTokens — depthFallback signal", () => {
+  it("returns depthFallback=false when a repeating heading depth exists", () => {
+    const md = "# Chapter 1\n\nProse.\n\n# Chapter 2\n\nMore.";
+    const result = parseMarkdownTokens(md);
+    expect(result).toHaveProperty("sections");
+    expect(result).toHaveProperty("depthFallback");
+    expect(result.depthFallback).toBe(false);
+  });
+  it("returns depthFallback=true when no repeating depth exists (only one heading)", () => {
+    const md = "# Solo Chapter\n\nProse.";
+    const result = parseMarkdownTokens(md);
+    expect(result.depthFallback).toBe(true);
+  });
+  it("returns depthFallback=false for a no-headings doc (fallback doesn't apply)", () => {
+    // No headings means pickSectionDepth returns Infinity and never fires
+    // the fallback path. depthFallback=false: the fallback didn't fire.
+    const md = "Just prose, no headings.";
+    const result = parseMarkdownTokens(md);
+    expect(result.depthFallback).toBe(false);
   });
 });
 
 describe("parseMarkdownTokens — edge cases", () => {
   it("link inside heading: title keeps the label, not the URL", () => {
     const md = "# Chapter [with link](https://example.com)\n\nBody.";
-    const [s] = parseMarkdownTokens(md);
+    const { sections: [s] } = parseMarkdownTokens(md);
     expect(s.title).toBe("Chapter with link");
   });
 
   it("escaped emphasis (\\*not italic\\*) survives as literal characters", () => {
-    const [s] = parseMarkdownTokens("Some \\*not italic\\* text.");
+    const { sections: [s] } = parseMarkdownTokens("Some \\*not italic\\* text.");
     expect(s.content).toContain("*not italic*");
     expect(s.content).not.toContain("__not italic__");
   });
 
   it("setext h1 (=== underline) splits sections; setext h2 (---) stays inline", () => {
     const md = "First Heading\n=============\n\nBody one.\n\nA Sub-Heading\n--------------\n\nBody two.";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(1);
     expect(sections[0].title).toBe("First Heading");
     expect(sections[0].content).toContain("## A Sub-Heading");
@@ -184,14 +206,14 @@ describe("parseMarkdownTokens — edge cases", () => {
 
   it("setext h1 with multiple === sections produces multiple chapters", () => {
     const md = "Chapter A\n=========\n\nBody A.\n\nChapter B\n=========\n\nBody B.";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(2);
     expect(sections.map((s) => s.title)).toEqual(["Chapter A", "Chapter B"]);
   });
 
   it("YAML front matter does NOT appear in any section's content", () => {
     const md = "---\ntitle: Hello\nauthor: Me\n---\n\n# Real Heading\n\nBody.";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     // Either a leading "document" section with the frontmatter dropped, or
     // just the # Real Heading section. Either way: no YAML in output.
     for (const s of sections) {
@@ -202,14 +224,14 @@ describe("parseMarkdownTokens — edge cases", () => {
 
   it("sections without content are dropped (no phantom 'empty chapter')", () => {
     const md = "# Empty\n\n# Real\n\nThis one has content.";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(1);
     expect(sections[0].title).toBe("Real");
   });
 
   it("strips front matter even when document has no headings", () => {
     const md = `---\ntitle: My Doc\nauthor: Me\n---\n\nJust some prose. No headings.`;
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(1);
     expect(sections[0].content).not.toContain("title:");
     expect(sections[0].content).not.toContain("---");
@@ -223,16 +245,16 @@ describe("parseMarkdownTokens — edge cases", () => {
     // front matter; stripped does not. The fallback must use stripped.
     const bom = "﻿";
     const md = bom + "---\ntitle: My Doc\nauthor: Me\n---\n\n---\n\n---";
-    const sections = parseMarkdownTokens(md);
+    const { sections } = parseMarkdownTokens(md);
     expect(sections).toHaveLength(1);
     expect(sections[0].content).not.toContain("title:");
     expect(sections[0].content).not.toContain("author:");
     expect(sections[0].content).not.toContain("﻿");
   });
 
-  it("returns Section[] satisfying the renderer contract", () => {
+  it("returns sections satisfying the renderer contract", () => {
     const ALLOWED = ["chapter", "page", "section", "document"];
-    const sections = parseMarkdownTokens("# A\n\ntext\n\n# B\n\nmore");
+    const { sections } = parseMarkdownTokens("# A\n\ntext\n\n# B\n\nmore");
     for (const s of sections) {
       expect(ALLOWED).toContain(s.type);
       expect(typeof s.content).toBe("string");

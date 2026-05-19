@@ -77,12 +77,19 @@ const UPDATE = process.argv.includes("--update");
 
 if (!existsSync(GOLDEN_DIR)) mkdirSync(GOLDEN_DIR, { recursive: true });
 
+// Normalize parser results. Text parsers now return { sections, depthFallback }
+// (Task C2-3); binary parsers return Section[]. The harness scores sections
+// only, so we extract the array for uniform downstream classification.
+function normalize(result) {
+  return Array.isArray(result) ? result : result.sections;
+}
+
 // Dispatch by format. Text dispatchers take a string; binary dispatchers
 // take a File-like (buffer wrapped via bufferToFile).
 const DISPATCH = {
-  txt: { kind: "text", run: (text) => detectTextStructure(text) },
-  md: { kind: "text", run: (text) => mdParser(text) },
-  html: { kind: "text", run: (text) => parseHTMLStructured(text) },
+  txt: { kind: "text", run: (text) => normalize(detectTextStructure(text)) },
+  md: { kind: "text", run: (text) => normalize(mdParser(text)) },
+  html: { kind: "text", run: (text) => normalize(parseHTMLStructured(text)) },
   epub: { kind: "binary", run: (file) => parseEPUB(file) },
   docx: { kind: "binary", run: (file) => parseDOCX(file) },
   pdf: {
