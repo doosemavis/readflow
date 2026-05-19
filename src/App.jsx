@@ -66,7 +66,7 @@ const DARK_THEME_KEYS = ["phosphor", "jungle", "dark", "midnight", "obsidian"];
 import { parsePDF, parseEPUB, parseDOCX, parseHTMLStructured, parseMarkdownStructured, detectTextStructure, parseInWorker, runThemeTransition, sniffDocumentType } from "./utils";
 import { storageGet, storageSet, storageDel } from "./utils/storage";
 import { supabase } from "./utils/supabase";
-import { track } from "./utils/track";
+import { track, trackParseOutcome } from "./utils/track";
 import { useSubscription } from "./hooks/useSubscription";
 import { useRecentDocs } from "./hooks/useRecentDocs";
 import { useLibrary } from "./hooks/useLibrary";
@@ -767,10 +767,16 @@ export default function App() {
       //   parseInWorker passes the worker postMessage payload through unchanged.
       const parserResult = sections;
       const normalizedSections = Array.isArray(parserResult) ? parserResult : parserResult.sections;
-      // depthFallback is available here for C2-5 telemetry (trackParseOutcome).
-      // eslint-disable-next-line no-unused-vars
       const depthFallback = Array.isArray(parserResult) ? false : Boolean(parserResult.depthFallback);
       sections = normalizedSections;
+      // Fire-and-forget telemetry — never block the UI render path on a DB insert.
+      void trackParseOutcome({
+        format: ext === "htm" ? "html" : ext,
+        depthFallback,
+        sectionCount: sections.length,
+        docByteSize: file?.size ?? null,
+        ext: file?.name?.split(".").pop()?.toLowerCase() ?? null,
+      });
       const fullText = sections.map(s => [s.title, s.content].filter(Boolean).join("\n\n")).join("\n\n");
       // Empty-content guard: if the parser returned no readable text, the
       // file is most likely image-only (scanned PDF without OCR), encrypted,
