@@ -449,11 +449,10 @@ export default function App() {
 
   // ── Render settings: only props that genuinely change paragraph/section JSX (palette colors, bold split, theme). ──
   //     NeuroDiv/HueGuide/Focus are NOT here — they flip via featureClassRef and never trigger Section re-renders.
-  const settings = useMemo(() => ({
-    neuroDivIntensity,
-    huePalette,
-    t,
-  }), [neuroDivIntensity, huePalette, t]);
+  const settings = useMemo(
+    () => ({ neuroDivIntensity, huePalette, fg: t.fg, fgSoft: t.fgSoft, border: t.border }),
+    [neuroDivIntensity, huePalette, t.fg, t.fgSoft, t.border],
+  );
 
   // ── Handlers ──
   // Chapter jump pipeline (matches restore for visual consistency):

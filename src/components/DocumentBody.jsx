@@ -199,7 +199,7 @@ const Paragraph = memo(function Paragraph({ para, idx, huePalette, neuroDivInten
 });
 
 const Section = memo(function Section({ section, si, settings, onParaMouseEnter, refCallback, titleRefCallback }) {
-  const { t, huePalette, neuroDivIntensity } = settings;
+  const { fg, fgSoft, border, huePalette, neuroDivIntensity } = settings;
   const isPage = section.type === "page";
   const typeLabel = isPage ? `Page ${section.number}` : null;
   // Prefer the original document's measured ratio so a 2.25× h1 stays
@@ -241,12 +241,12 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
     <div ref={refCallback} className="rf-section">
       {si > 0 && (typeLabel ? (
         <div style={DIVIDER_BAR_STYLE}>
-          <div style={{ ...DIVIDER_LINE_BASE, background: t.border }} />
-          <span style={{ ...TYPE_LABEL_STYLE, color: t.fgSoft }}>{typeLabel}</span>
-          <div style={{ ...DIVIDER_LINE_BASE, background: t.border }} />
+          <div style={{ ...DIVIDER_LINE_BASE, background: border }} />
+          <span style={{ ...TYPE_LABEL_STYLE, color: fgSoft }}>{typeLabel}</span>
+          <div style={{ ...DIVIDER_LINE_BASE, background: border }} />
         </div>
       ) : (
-        <div style={{ ...DIVIDER_PLAIN_STYLE, background: t.border }} />
+        <div style={{ ...DIVIDER_PLAIN_STYLE, background: border }} />
       ))}
       <div ref={titleRefCallback} style={TITLE_WRAP_STYLE}>
         {/* Title fade-in is handled by a CSS animation on the wrapper
@@ -255,7 +255,7 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
         <h2 style={{
           fontSize: `calc(var(--rf-font-size, 18px) * ${titleScale})`,
           fontWeight: isPage ? 740 : 760,
-          color: t.fg,
+          color: fg,
           margin: 0,
           lineHeight: isPage ? 1.3 : 1.25,
           fontFamily: "var(--rf-font-family, 'Literata', serif)",
@@ -277,7 +277,7 @@ const Section = memo(function Section({ section, si, settings, onParaMouseEnter,
 });
 
 const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections, wrapperRef, featureClassRef, settings, focusModeRef, setFocusPara, sectionRefs, titleRefs }) {
-  const { huePalette, neuroDivIntensity, t } = settings;
+  const { huePalette, neuroDivIntensity, fg } = settings;
 
   const onParaMouseEnter = useCallback((idx) => {
     if (focusModeRef.current) setFocusPara(idx);
@@ -308,10 +308,10 @@ const DocumentBody = memo(function DocumentBody({ text, docSections, hasSections
     lineHeight: "var(--rf-line-height, 1.8)",
     letterSpacing: "var(--rf-letter-spacing, 0px)",
     wordSpacing: "var(--rf-word-spacing, 0px)",
-    color: t.fg,
+    color: fg,
     transition: "width 0.3s ease",
     boxSizing: "border-box",
-  }), [t.fg]);
+  }), [fg]);
 
   return (
     <div ref={wrapperRef} className="rf-doc-wrapper" style={wrapperStyle}>
