@@ -628,9 +628,10 @@ function buildPerPageSections(pageData, fontTiers) {
     const baselineX = pageBaselineX(pd.lines);
     const content = joinHyphenated(buildPageContent(pd.lines, bodyStartIdx, pd.medianGap, fontTiers, baselineX));
     if (!content.trim()) continue;
-    const section = { type: "page", title, number: pd.pageNum, content };
-    if (titleSizeRatio != null && titleSizeRatio > 0) section.titleSizeRatio = titleSizeRatio;
-    sections.push(section);
+    sections.push({
+      type: "page", title, number: pd.pageNum, content,
+      ...(titleSizeRatio != null && { titleSizeRatio }),
+    });
   }
   return sections;
 }

@@ -122,6 +122,10 @@ describe("buildPerPageSections — contract guarantees", () => {
       ],
     }];
     const result = analyzePDF({ rawPages, resolvedOutline: null });
+    // buildPerPageSections suppresses the title-only page (empty content).
+    // analyzePDF's fallback then synthesizes exactly one document section
+    // from the raw text so the reader always has something to show.
+    expect(result).toHaveLength(1); // fallback fires, not an empty-push bug
     for (const s of result) {
       expect(s.content.trim().length).toBeGreaterThan(0);
     }
