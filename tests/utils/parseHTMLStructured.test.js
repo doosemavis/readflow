@@ -165,5 +165,8 @@ describe("parseHTMLStructured — textContent fallback consistency (Task A5)", (
     for (const s of sections) {
       expect(s.content.trim().length).toBeGreaterThan(0);
     }
+    const joined = sections.map((s) => s.content).join(" ");
+    expect(joined).toContain("One paragraph.");
+    expect(joined).toContain("Another paragraph.");
   });
 });
