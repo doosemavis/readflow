@@ -322,7 +322,7 @@ export default function App() {
 
   // ── Derived ──
   const t = useMemo(() => ({ ...THEMES[theme], key: theme }), [theme]);
-  const currentFont = FONTS.find(f => f.name === fontFamily);
+  const currentFont = useMemo(() => FONTS.find(f => f.name === fontFamily), [fontFamily]);
   const hasSections = docSections && docSections.length > 0 && (docSections.length > 1 || docSections[0]?.title);
 
   // Sync favicon + browser-chrome theme-color to the active theme. SVG is
