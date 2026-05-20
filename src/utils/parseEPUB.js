@@ -114,10 +114,13 @@ export async function parseEPUB(file) {
     // Determine which NCX entries map to this spine file.
     const entries = tocEntries.get(href) ?? [];
 
-    // Use fragment-splitting only when every navPoint for this file specifies
-    // a distinct non-null fragment. If any entry has no fragment, treat the
-    // whole file as one section (avoids partial-split confusion).
-    const hasFragments = entries.length > 1 && entries.every(e => e.fragment !== null);
+    // Use fragment-splitting whenever at least one navPoint for this file
+    // specifies a fragment. A null-fragment entry[0] means "start of file" —
+    // its segment accumulates content from the beginning until the next
+    // fragment-anchored entry fires. Switched from .every() to .some() so
+    // mixed layouts (entry[0] = whole file, entry[1+] = fragments) split
+    // correctly instead of collapsing to one section.
+    const hasFragments = entries.length > 1 && entries.some(e => e.fragment !== null);
 
     if (!hasFragments) {
       // Single navPoint or no NCX entry — emit one section per spine file.
@@ -135,8 +138,10 @@ export async function parseEPUB(file) {
     }
 
     // Multi-navPoint case: split body children at each fragment anchor.
-    // Build a lookup: fragmentId → bucket index in entries order.
-    const fragmentToBucket = new Map(entries.map((e, i) => [e.fragment, i]));
+    // Build a lookup: fragmentId → NCX label for that anchor.
+    const fragmentToLabel = new Map(
+      entries.filter(e => e.fragment !== null).map(e => [e.fragment, e.label]),
+    );
 
     // Verify at least one fragment anchor exists in the document before
     // committing to the split path. If none match, fall back gracefully.
@@ -154,34 +159,47 @@ export async function parseEPUB(file) {
       continue;
     }
 
-    // Walk body's direct child nodes in DOM order. Track which bucket "owns"
-    // each child: when we encounter an element whose id matches a fragment
-    // anchor, switch ownership to that fragment's bucket.
-    // Content before the first recognised anchor goes into bucket 0.
-    const buckets = entries.map(e => ({ label: e.label, nodes: [] }));
-    let bucketIdx = 0;
+    // Walk body's direct child nodes in DOM order, building segments in
+    // encounter order (not NCX order). This ensures out-of-order NCX entries
+    // don't produce wrong section ordering.
+    //
+    // Preamble handling: content before the first recognised fragment anchor
+    // lands in a sentinel preamble segment. If entry[0] has no fragment it
+    // represents the start-of-file, so the preamble label is set to
+    // entries[0].label and the preamble merges into that entry naturally.
+    // If entry[0] has a fragment, preamble stays null-titled.
+    const preambleLabel = entries[0].fragment === null ? entries[0].label : null;
+    // segments is built in DOM-encounter order during the walk.
+    const segments = [{ label: preambleLabel, nodes: [] }];
 
     for (const child of Array.from(body.childNodes)) {
       if (child.nodeType === 1 && child.id) {
-        const targetIdx = fragmentToBucket.get(child.id);
-        if (targetIdx !== undefined) {
-          bucketIdx = targetIdx;
+        const label = fragmentToLabel.get(child.id);
+        if (label !== undefined) {
+          // Start a new segment in document-encounter order.
+          segments.push({ label, nodes: [] });
         }
       }
-      buckets[bucketIdx].nodes.push(child);
+      segments[segments.length - 1].nodes.push(child);
     }
 
-    for (const bucket of buckets) {
-      if (bucket.nodes.length === 0) continue;
+    for (const seg of segments) {
+      if (seg.nodes.length === 0) continue;
       // Wrap nodes in a temporary element so walk() can recurse naturally.
       const wrapper = parsed.createElement("div");
-      bucket.nodes.forEach(n => wrapper.appendChild(n.cloneNode(true)));
+      seg.nodes.forEach(n => wrapper.appendChild(n.cloneNode(true)));
       const rawText = walk(wrapper).trim();
-      if (!rawText) continue;
+      if (!rawText) {
+        // Empty fragment is unusual enough to be worth noting for debugging.
+        if (seg.label !== null) {
+          console.warn(`[parseEPUB] navPoint '${seg.label}' in ${href} has empty content — skipping`);
+        }
+        continue;
+      }
 
       chapterNum++;
-      const content = stripLeadingTitle(rawText, bucket.label);
-      sections.push({ type: "chapter", title: bucket.label, number: chapterNum, content });
+      const content = stripLeadingTitle(rawText, seg.label);
+      sections.push({ type: "chapter", title: seg.label, number: chapterNum, content });
     }
   }
   if (sections.length === 0) throw new Error("No readable content found in EPUB");
