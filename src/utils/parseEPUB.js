@@ -58,7 +58,12 @@ export async function parseEPUB(file) {
   const spineRefs = [];
   opfDoc.querySelectorAll("itemref").forEach(ref => { spineRefs.push(ref.getAttribute("idref")); });
 
-  const tocTitles = {};
+  // Fragment-aware NCX index: filename → ordered list of { fragment: string|null, label: string }
+  // When a navPoint targets "file.xhtml#anchor", fragment is "anchor".
+  // When it targets "file.xhtml" with no fragment, fragment is null.
+  // Multiple navPoints targeting the same file are kept in navMap order so we
+  // can split that file's body at each anchor element.
+  const tocEntries = new Map();
   const ncxItem = Array.from(opfDoc.querySelectorAll("item")).find(i => i.getAttribute("media-type") === "application/x-dtbncx+xml");
   if (ncxItem) {
     const ncxHref = opfDir + ncxItem.getAttribute("href");
@@ -72,12 +77,25 @@ export async function parseEPUB(file) {
       } else {
         ncxDoc.querySelectorAll("navPoint").forEach(np => {
           const label = np.querySelector("navLabel text")?.textContent?.trim();
-          const src = np.querySelector("content")?.getAttribute("src")?.split("#")[0];
-          if (label && src) tocTitles[src] = label;
+          const rawSrc = np.querySelector("content")?.getAttribute("src");
+          if (!label || !rawSrc) return;
+          const [path, fragment = null] = rawSrc.split("#");
+          if (!tocEntries.has(path)) tocEntries.set(path, []);
+          tocEntries.get(path).push({ fragment: fragment || null, label });
         });
       }
     }
   }
+
+  const walk = (node) => {
+    if (node.nodeType === 3) return node.textContent.replace(/[\r\n]+/g, " ").replace(/ {2,}/g, " ");
+    if (node.nodeName === "BR") return " ";
+    const tag = node.nodeName.toLowerCase();
+    const isBlock = /^(p|div|h[1-6]|li|blockquote|section|article|tr|dt|dd)$/.test(tag);
+    const inner = Array.from(node.childNodes).map(walk).join("");
+    if (isBlock && inner.trim()) return "\n\n" + inner.trim();
+    return inner;
+  };
 
   const sections = [];
   let chapterNum = 0;
@@ -92,25 +110,97 @@ export async function parseEPUB(file) {
       continue;
     }
     const body = parsed.body || parsed.documentElement;
-    const headings = body.querySelectorAll("h1, h2, h3");
-    let title = tocTitles[href] || null;
-    if (!title && headings.length > 0) title = headings[0].textContent.trim();
 
-    const walk = (node) => {
-      if (node.nodeType === 3) return node.textContent.replace(/[\r\n]+/g, " ").replace(/ {2,}/g, " ");
-      if (node.nodeName === "BR") return " ";
-      const tag = node.nodeName.toLowerCase();
-      const isBlock = /^(p|div|h[1-6]|li|blockquote|section|article|tr|dt|dd)$/.test(tag);
-      let inner = Array.from(node.childNodes).map(walk).join("");
-      if (isBlock && inner.trim()) return "\n\n" + inner.trim();
-      return inner;
-    };
-    const rawText = walk(body).trim();
-    if (!rawText) continue;
+    // Determine which NCX entries map to this spine file.
+    const entries = tocEntries.get(href) ?? [];
 
-    chapterNum++;
-    const content = stripLeadingTitle(rawText, title);
-    sections.push({ type: "chapter", title: title || null, number: chapterNum, content });
+    // Use fragment-splitting whenever at least one navPoint for this file
+    // specifies a fragment. A null-fragment entry[0] means "start of file" —
+    // its segment accumulates content from the beginning until the next
+    // fragment-anchored entry fires. Switched from .every() to .some() so
+    // mixed layouts (entry[0] = whole file, entry[1+] = fragments) split
+    // correctly instead of collapsing to one section.
+    const hasFragments = entries.length > 1 && entries.some(e => e.fragment !== null);
+
+    if (!hasFragments) {
+      // Single navPoint or no NCX entry — emit one section per spine file.
+      const headings = body.querySelectorAll("h1, h2, h3");
+      let title = entries[0]?.label ?? null;
+      if (!title && headings.length > 0) title = headings[0].textContent.trim();
+
+      const rawText = walk(body).trim();
+      if (!rawText) continue;
+
+      chapterNum++;
+      const content = stripLeadingTitle(rawText, title);
+      sections.push({ type: "chapter", title: title || null, number: chapterNum, content });
+      continue;
+    }
+
+    // Multi-navPoint case: split body children at each fragment anchor.
+    // Build a lookup: fragmentId → NCX label for that anchor.
+    const fragmentToLabel = new Map(
+      entries.filter(e => e.fragment !== null).map(e => [e.fragment, e.label]),
+    );
+
+    // Verify at least one fragment anchor exists in the document before
+    // committing to the split path. If none match, fall back gracefully.
+    const anyFragmentMatched = entries.some(
+      e => e.fragment && body.querySelector(`[id="${e.fragment}"]`) !== null,
+    );
+    if (!anyFragmentMatched) {
+      console.warn(`[parseEPUB] NCX fragment anchors not found in ${href} — falling back to single section`);
+      const rawText = walk(body).trim();
+      if (!rawText) continue;
+      chapterNum++;
+      const fallbackTitle = entries[0]?.label ?? null;
+      const content = stripLeadingTitle(rawText, fallbackTitle);
+      sections.push({ type: "chapter", title: fallbackTitle, number: chapterNum, content });
+      continue;
+    }
+
+    // Walk body's direct child nodes in DOM order, building segments in
+    // encounter order (not NCX order). This ensures out-of-order NCX entries
+    // don't produce wrong section ordering.
+    //
+    // Preamble handling: content before the first recognised fragment anchor
+    // lands in a sentinel preamble segment. If entry[0] has no fragment it
+    // represents the start-of-file, so the preamble label is set to
+    // entries[0].label and the preamble merges into that entry naturally.
+    // If entry[0] has a fragment, preamble stays null-titled.
+    const preambleLabel = entries[0].fragment === null ? entries[0].label : null;
+    // segments is built in DOM-encounter order during the walk.
+    const segments = [{ label: preambleLabel, nodes: [] }];
+
+    for (const child of Array.from(body.childNodes)) {
+      if (child.nodeType === 1 && child.id) {
+        const label = fragmentToLabel.get(child.id);
+        if (label !== undefined) {
+          // Start a new segment in document-encounter order.
+          segments.push({ label, nodes: [] });
+        }
+      }
+      segments[segments.length - 1].nodes.push(child);
+    }
+
+    for (const seg of segments) {
+      if (seg.nodes.length === 0) continue;
+      // Wrap nodes in a temporary element so walk() can recurse naturally.
+      const wrapper = parsed.createElement("div");
+      seg.nodes.forEach(n => wrapper.appendChild(n.cloneNode(true)));
+      const rawText = walk(wrapper).trim();
+      if (!rawText) {
+        // Empty fragment is unusual enough to be worth noting for debugging.
+        if (seg.label !== null) {
+          console.warn(`[parseEPUB] navPoint '${seg.label}' in ${href} has empty content — skipping`);
+        }
+        continue;
+      }
+
+      chapterNum++;
+      const content = stripLeadingTitle(rawText, seg.label);
+      sections.push({ type: "chapter", title: seg.label, number: chapterNum, content });
+    }
   }
   if (sections.length === 0) throw new Error("No readable content found in EPUB");
   return sections;

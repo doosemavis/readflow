@@ -150,6 +150,249 @@ describe("parseEPUB — DOMParser parsererror detection", () => {
   });
 });
 
+describe("parseEPUB — multi-chapter-per-file (NCX fragment anchors)", () => {
+  let parseEPUB;
+
+  beforeEach(async () => {
+    const mod = await import("../../src/utils/parseEPUB.js");
+    parseEPUB = mod.parseEPUB;
+  });
+
+  it("splits a single XHTML file into multiple sections when NCX has multiple navPoints targeting different fragment anchors", async () => {
+    installJSZip({
+      "META-INF/container.xml": `<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles>
+</container>`,
+      "OEBPS/content.opf": `<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="chunk-a" href="chunk-a.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chunk-b" href="chunk-b.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="chunk-a"/>
+    <itemref idref="chunk-b"/>
+  </spine>
+</package>`,
+      "OEBPS/toc.ncx": `<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">
+  <navMap>
+    <navPoint><navLabel><text>Etymology</text></navLabel><content src="chunk-a.xhtml#ch1"/></navPoint>
+    <navPoint><navLabel><text>Chapter 1. Loomings</text></navLabel><content src="chunk-a.xhtml#ch2"/></navPoint>
+    <navPoint><navLabel><text>Chapter 2. The Carpet-Bag</text></navLabel><content src="chunk-b.xhtml#ch3"/></navPoint>
+  </navMap>
+</ncx>`,
+      "OEBPS/chunk-a.xhtml": `<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<h2 id="ch1">Etymology</h2><p>Etymology prose.</p>
+<h2 id="ch2">Chapter 1. Loomings</h2><p>Loomings prose.</p>
+</body></html>`,
+      "OEBPS/chunk-b.xhtml": `<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<h2 id="ch3">Chapter 2. The Carpet-Bag</h2><p>Carpet-bag prose.</p>
+</body></html>`,
+    });
+
+    const fakeFile = { arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) };
+    const sections = await parseEPUB(fakeFile);
+
+    expect(sections).toHaveLength(3);
+    expect(sections[0].title).toBe("Etymology");
+    expect(sections[0].content).toContain("Etymology prose");
+    expect(sections[0].content).not.toContain("Loomings"); // splits at fragment
+    expect(sections[1].title).toBe("Chapter 1. Loomings");
+    expect(sections[1].content).toContain("Loomings prose");
+    expect(sections[1].content).not.toContain("Etymology prose"); // doesn't bleed back
+    expect(sections[2].title).toBe("Chapter 2. The Carpet-Bag");
+    expect(sections[2].content).toContain("Carpet-bag prose");
+  });
+});
+
+describe("parseEPUB — edge cases: single fragment, missing fragment, out-of-order fragments, preamble", () => {
+  let parseEPUB;
+
+  beforeEach(async () => {
+    const mod = await import("../../src/utils/parseEPUB.js");
+    parseEPUB = mod.parseEPUB;
+  });
+
+  // Test a — single navPoint WITH a fragment (not whole-file).
+  // hasFragments requires entries.length > 1, so a lone fragment-targeted
+  // navPoint goes through !hasFragments and emits one section with entries[0].label.
+  it("single navPoint with a fragment emits 1 section with the navPoint label (test a)", async () => {
+    installJSZip({
+      "META-INF/container.xml": `<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles>
+</container>`,
+      "OEBPS/content.opf": `<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="spine1" href="book.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="spine1"/>
+  </spine>
+</package>`,
+      "OEBPS/toc.ncx": `<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">
+  <navMap>
+    <navPoint><navLabel><text>Chapter One</text></navLabel><content src="book.xhtml#ch1"/></navPoint>
+  </navMap>
+</ncx>`,
+      "OEBPS/book.xhtml": `<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<h2 id="ch1">Chapter One</h2><p>Chapter one prose.</p>
+</body></html>`,
+    });
+    const fakeFile = { arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) };
+    const sections = await parseEPUB(fakeFile);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].title).toBe("Chapter One");
+    expect(sections[0].content).toContain("Chapter one prose");
+  });
+
+  // Test b — fragment not in DOM (no-match warn path).
+  // Two navPoints both targeting fragments that don't exist in the XHTML.
+  // Expected: console.warn fired; falls back to single section with first label.
+  it("missing fragment IDs trigger warn and fall back to single section (test b)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    installJSZip({
+      "META-INF/container.xml": `<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles>
+</container>`,
+      "OEBPS/content.opf": `<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="spine1" href="book.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="spine1"/>
+  </spine>
+</package>`,
+      "OEBPS/toc.ncx": `<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">
+  <navMap>
+    <navPoint><navLabel><text>Chapter One</text></navLabel><content src="book.xhtml#ch1"/></navPoint>
+    <navPoint><navLabel><text>Chapter Two</text></navLabel><content src="book.xhtml#ch2"/></navPoint>
+  </navMap>
+</ncx>`,
+      // Neither #ch1 nor #ch2 exist in this XHTML
+      "OEBPS/book.xhtml": `<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<p>All the prose, no anchors here.</p>
+</body></html>`,
+    });
+    const fakeFile = { arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) };
+    const sections = await parseEPUB(fakeFile);
+
+    // Falls back to a single section with the first navPoint label
+    expect(sections).toHaveLength(1);
+    expect(sections[0].title).toBe("Chapter One");
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/fragment|anchor/i));
+    warnSpy.mockRestore();
+  });
+
+  // Test c — fragments listed in NCX in wrong order vs DOM order.
+  // NCX says #ch2 then #ch1, but the XHTML has #ch1 before #ch2.
+  // Expected: sections come out in DOCUMENT order (ch1 first), not NCX order.
+  it("out-of-NCX-order fragments are emitted in document order (test c)", async () => {
+    installJSZip({
+      "META-INF/container.xml": `<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles>
+</container>`,
+      "OEBPS/content.opf": `<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="spine1" href="book.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="spine1"/>
+  </spine>
+</package>`,
+      // NCX intentionally lists ch2 before ch1 (wrong order)
+      "OEBPS/toc.ncx": `<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">
+  <navMap>
+    <navPoint><navLabel><text>Chapter Two</text></navLabel><content src="book.xhtml#ch2"/></navPoint>
+    <navPoint><navLabel><text>Chapter One</text></navLabel><content src="book.xhtml#ch1"/></navPoint>
+  </navMap>
+</ncx>`,
+      // DOM has ch1 before ch2
+      "OEBPS/book.xhtml": `<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<h2 id="ch1">Chapter One</h2><p>Chapter one prose.</p>
+<h2 id="ch2">Chapter Two</h2><p>Chapter two prose.</p>
+</body></html>`,
+    });
+    const fakeFile = { arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) };
+    const sections = await parseEPUB(fakeFile);
+
+    // Document order: ch1 first, ch2 second
+    expect(sections).toHaveLength(2);
+    expect(sections[0].title).toBe("Chapter One");
+    expect(sections[0].content).toContain("Chapter one prose");
+    expect(sections[1].title).toBe("Chapter Two");
+    expect(sections[1].content).toContain("Chapter two prose");
+  });
+
+  // Test d — preamble content before the first fragment anchor.
+  // Two navPoints (#ch1, #ch2), but the XHTML has a prose paragraph
+  // BEFORE <h2 id="ch1">. Per the Issue 1 fix: since entry[0].fragment is
+  // non-null (#ch1), preamble is emitted as a separate untitled section.
+  it("preamble before first fragment anchor emits as an extra null-title section (test d)", async () => {
+    installJSZip({
+      "META-INF/container.xml": `<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles>
+</container>`,
+      "OEBPS/content.opf": `<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="spine1" href="book.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="spine1"/>
+  </spine>
+</package>`,
+      "OEBPS/toc.ncx": `<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/">
+  <navMap>
+    <navPoint><navLabel><text>Chapter One</text></navLabel><content src="book.xhtml#ch1"/></navPoint>
+    <navPoint><navLabel><text>Chapter Two</text></navLabel><content src="book.xhtml#ch2"/></navPoint>
+  </navMap>
+</ncx>`,
+      // Preamble paragraph appears BEFORE the first chapter anchor
+      "OEBPS/book.xhtml": `<?xml version="1.0"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<p>Preamble prose before any chapter.</p>
+<h2 id="ch1">Chapter One</h2><p>Chapter one prose.</p>
+<h2 id="ch2">Chapter Two</h2><p>Chapter two prose.</p>
+</body></html>`,
+    });
+    const fakeFile = { arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) };
+    const sections = await parseEPUB(fakeFile);
+
+    // Preamble (null title) + ch1 + ch2 = 3 sections
+    expect(sections).toHaveLength(3);
+    expect(sections[0].title).toBeNull();
+    expect(sections[0].content).toContain("Preamble prose");
+    expect(sections[1].title).toBe("Chapter One");
+    expect(sections[1].content).toContain("Chapter one prose");
+    expect(sections[2].title).toBe("Chapter Two");
+    expect(sections[2].content).toContain("Chapter two prose");
+  });
+});
+
 describe("stripLeadingTitle", () => {
   it("strips an exact-match title", () => {
     expect(stripLeadingTitle("Chapter 1\n\nProse here.", "Chapter 1")).toBe("Prose here.");
